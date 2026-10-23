@@ -76,6 +76,27 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(a.run("task")["state"], "FAILED")
         self.assertEqual(a.llm_calls, 3)
 
+    def test_rejected_responses_preserved_in_trace(self):
+        malformed = 'não é JSON\n{"unfinished":'
+        invalid_spec = '```json\n{ "objective": "", "acceptance_criteria": [] }\n```'
+        invalid_plan = '{ "steps": [], "test_strategy": "" }'
+        cases = [
+            ([malformed] * 3, "json_or_size", malformed, 3),
+            ([invalid_spec], "specification", invalid_spec, 1),
+            ([SPEC, invalid_plan], "plan", invalid_plan, 2),
+        ]
+        for responses, validation, raw, call in cases:
+            with self.subTest(validation=validation):
+                a = self.agent(ScriptClient(responses))
+                self.assertEqual(a.run("task")["state"], "FAILED")
+                events = [json.loads(line) for line in
+                          (a.run_dir / "actions.jsonl").read_text().splitlines()]
+                rejected = [e for e in events if e["kind"] == "invalid_response"]
+                self.assertEqual(rejected[-1]["raw_response"], raw)
+                self.assertEqual(rejected[-1]["validation"], validation)
+                self.assertEqual(rejected[-1]["llm_call"], call)
+                self.assertTrue(rejected[-1]["reason"])
+
     def test_call_limit_is_global(self):
         a = self.agent(ScriptClient([SPEC]), max_llm_calls=1)
         self.assertEqual(a.run("task")["state"], "FAILED")

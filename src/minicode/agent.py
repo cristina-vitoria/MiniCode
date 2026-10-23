@@ -55,6 +55,7 @@ class Agent:
         self.iterations = self.llm_calls = 0
         self.task = ""
         self.history = []
+        self.last_raw_response = None
         self.events = []
         self.run_dir = None
 
@@ -107,14 +108,17 @@ class Agent:
             self.llm_calls += 1
             self.event("llm_call", number=self.llm_calls)
             raw = self.client.complete(fixed + self.history + [request])
+            self.last_raw_response = raw
             try:
                 value = parse_object(raw)
                 if len(raw) > 40000:
                     raise ValueError("Resposta grande demais")
                 self.history.extend([request, {"role": "assistant", "content": raw}])
                 return value
-            except (ValueError, TypeError):
-                self.event("invalid_response", attempt=attempt + 1)
+            except (ValueError, TypeError) as exc:
+                self.event("invalid_response", attempt=attempt + 1,
+                           llm_call=self.llm_calls, raw_response=raw,
+                           reason=str(exc), validation="json_or_size")
                 request = {"role": "user", "content": instruction + "\nSua resposta anterior era inválida. Envie somente objeto JSON válido."}
         raise ModelError("Modelo não produziu JSON válido após 3 chamadas")
 
@@ -182,12 +186,18 @@ class Agent:
                     continue
             spec = self.ask('Produza a especificação: {"objective":"...", "acceptance_criteria":["critério verificável"], "assumptions":["..."]}. Não implemente.\nArquivos: ' + json.dumps(files)[:12000] + '\nContexto: ' + json.dumps(context))
             if not isinstance(spec.get("objective"), str) or not spec["objective"].strip() or len(spec["objective"]) > 4000 or not self.strings(spec.get("acceptance_criteria")):
+                self.event("invalid_response", llm_call=self.llm_calls,
+                           raw_response=self.last_raw_response, validation="specification",
+                           reason="Especificação sem objetivo ou critérios verificáveis")
                 raise ModelError("Especificação sem objetivo ou critérios verificáveis")
             self.spec = spec
             (self.run_dir / "specification.md").write_text("# Specification\n\n" + spec["objective"] + "\n\n## Acceptance criteria\n" + "\n".join("- " + s for s in spec["acceptance_criteria"]) + "\n\n## Assumptions\n" + json.dumps(spec.get("assumptions", []), ensure_ascii=False), encoding="utf-8")
             self.transition(State.SPECIFIED)
             plan = self.ask('Produza somente o plano: {"steps":["localizar...", "implementar...", "adicionar testes..."], "test_strategy":"como verificar os critérios com unittest"}.')
             if not self.strings(plan.get("steps")) or not isinstance(plan.get("test_strategy"), str) or not plan["test_strategy"].strip():
+                self.event("invalid_response", llm_call=self.llm_calls,
+                           raw_response=self.last_raw_response, validation="plan",
+                           reason="Plano inválido")
                 raise ModelError("Plano inválido")
             self.plan = plan
             (self.run_dir / "plan.md").write_text("# Plan\n\n" + "\n".join(f"{i}. {s}" for i, s in enumerate(plan["steps"], 1)) + "\n\n## Tests\n" + plan["test_strategy"], encoding="utf-8")
@@ -202,7 +212,8 @@ class Agent:
                         feedback = self.call_tool(action.get("tool"), action.get("args", {}))
                     except (ToolError, TypeError) as exc:
                         feedback = {"error": str(exc)}
-                        self.event("tool_rejected", action=action.get("tool"), error=str(exc))
+                        self.event("tool_rejected", action=action.get("tool"), error=str(exc),
+                                   llm_call=self.llm_calls, raw_response=self.last_raw_response)
                     if self.state != State.IMPLEMENTING:
                         break
                 if self.state == State.IMPLEMENTING:

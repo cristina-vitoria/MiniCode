@@ -8,3 +8,4 @@ __pycache__/
 .minicode/
 build/
 dist/
+experiments/results/

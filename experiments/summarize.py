@@ -46,6 +46,6 @@ for row in rows:
                 lines.append('<pre>' + html.escape(rejection['raw_response']) + '</pre>')
             else:
                 lines.append('  Resposta bruta indisponível neste rastro antigo.')
-lines += ['', 'A rejeição de uma especificação indica falha de estrutura exigida pelo harness; as respostas brutas disponíveis nos rastros são apresentadas acima e preservadas em summary.json. Rastros antigos podem não conter esse campo. Zero iterações significa falha antes da implementação, não solução na primeira tentativa.', '', 'Não houve ajuste entre repetições. Os resultados são do conjunto de desenvolvimento; a reserva heldout não foi executada.']
+lines += ['', 'A rejeição de uma especificação indica falha de estrutura exigida pelo harness; as respostas brutas disponíveis nos rastros são apresentadas acima e preservadas em summary.json. Rastros antigos podem não conter esse campo. Zero iterações significa falha antes da implementação, não solução na primeira tentativa.', '']
 (base.parent/'REPORT.md').write_text('\n'.join(lines)+'\n')
 print(json.dumps([{'run':r['run'], **r['metrics']} for r in rows], ensure_ascii=False))

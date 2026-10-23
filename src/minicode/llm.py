@@ -1,9 +1,9 @@
-"""Cliente HTTP compatível com Chat Completions; sem SDK ou credenciais em disco."""
+"""Cliente HTTP compatível com Chat Completions; credenciais via ambiente ou .env."""
 import json
-import os
 import urllib.error
 import urllib.request
 from urllib.parse import urlparse
+from .config import read_config
 
 
 class ModelError(RuntimeError):
@@ -16,13 +16,14 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class QwenClient:
-    def __init__(self):
-        base = os.environ.get("MINICODE_BASE_URL", "").rstrip("/")
-        self.model = os.environ.get("MINICODE_MODEL", "")
-        self.key = os.environ.get("MINICODE_API_KEY", "")
+    def __init__(self, env_file=None):
+        config = read_config(env_file)
+        base = config.get("MINICODE_BASE_URL", "").rstrip("/")
+        self.model = config.get("MINICODE_MODEL", "")
+        self.key = config.get("MINICODE_API_KEY", "")
         parsed = urlparse(base)
         if not base or not self.model:
-            raise ModelError("Defina MINICODE_BASE_URL e MINICODE_MODEL")
+            raise ModelError("Defina MINICODE_BASE_URL e MINICODE_MODEL no .env do diretório atual, em --env-file ou no ambiente")
         if parsed.scheme != "https" and not (parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1"}):
             raise ModelError("Use HTTPS (HTTP permitido apenas em localhost)")
         if parsed.username or parsed.password or parsed.query or parsed.fragment:

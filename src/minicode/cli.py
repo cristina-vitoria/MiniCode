@@ -15,6 +15,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="MiniCode — agente de programação v1")
     parser.add_argument("--project", default=".", help="Diretório do projeto alvo")
     parser.add_argument("--task", help="Solicitação; omitida = entrada interativa")
+    parser.add_argument("--env-file", help="Arquivo de configuração (padrão: .env do diretório atual)")
     parser.add_argument("--allow-local-tests", action="store_true", help="Executar código do projeto no host (somente projetos confiáveis)")
     parser.add_argument("--max-iterations", type=int, default=3)
     parser.add_argument("--max-actions", type=int, default=20)
@@ -26,7 +27,7 @@ def main(argv=None):
     mode = "local" if args.allow_local_tests else "docker"
     try:
         if args.evaluate:
-            result = evaluate(QwenClient, args.evaluate, mode, args.max_iterations,
+            result = evaluate(lambda: QwenClient(args.env_file), args.evaluate, mode, args.max_iterations,
                               args.max_actions, args.max_llm_calls, args.timeout)
             print(json.dumps(result["metrics"], indent=2))
             return 0
@@ -38,7 +39,7 @@ def main(argv=None):
             (root / "tests" / "test_factorial.py").write_text(test_source(CASES[0]["checks"]))
             client, task = DemoClient(), CASES[0]["task"]
         else:
-            client, task = QwenClient(), args.task or input("MiniCode > ")
+            client, task = QwenClient(args.env_file), args.task or input("MiniCode > ")
         agent = Agent(args.project, client, TestRunner(args.project, mode, args.timeout),
                       max_iterations=args.max_iterations, max_actions=args.max_actions,
                       max_llm_calls=args.max_llm_calls, progress=lambda text: print("→ " + text, flush=True))

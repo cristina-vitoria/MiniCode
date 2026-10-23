@@ -17,8 +17,4 @@ Os oráculos não garantem correção universal: são amostras de entradas. Um r
 
 `../.venv/bin/python run_protocol.py` (a partir desta pasta) executa duas repetições, `qwen-01` e `qwen-02`, com os defaults fixos do CLI. Requer endpoint configurado no `.env` da raiz, Docker acessível e imagem `python:3.12-slim` já disponível. Não sobrescreve execuções existentes. Para uma nova série, altere explicitamente os identificadores de saída e registre essa mudança.
 
-Cada repetição possui metadados, console e revisão de privacidade ao lado da pasta dos resultados. Os metadados registram commit, árvore de trabalho, hashes das fontes, modelo, data com fuso, limites, Python do host e do contêiner, ID e digest da imagem. A tag Docker não é fixada por digest pelo runner atual: o digest registrado identifica a imagem inspecionada; não altere a imagem durante a série.
-
-Execute `../.venv/bin/python summarize.py` para reconstruir `REPORT.md` e `results/summary.json`. O protocolo remove valores exatos da chave, endpoint e caminho pessoal dos artefatos; é necessária revisão adicional antes de publicação. `results/` continua ignorado pelo Git; preservar localmente não equivale a publicar.
-
-As propostas de generalização estão em `heldout/`. Ainda exigem projetos iniciais e oráculos congelados antes de avaliação. Não foram usadas para ajustar o agente.
+Execute `../.venv/bin/python summarize.py` para reconstruir `REPORT.md` e `results/summary.json`.

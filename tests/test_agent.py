@@ -4,8 +4,6 @@ import tempfile
 import unittest
 
 from minicode.agent import Agent, State
-from minicode.benchmark import CASES, test_source
-from minicode.demo import DemoClient
 from minicode.llm import parse_object
 from minicode.tools import TestRunner, ToolError
 
@@ -29,14 +27,22 @@ class AgentTests(unittest.TestCase):
         self.root = Path(self.temp.name)
 
     def agent(self, client=None, **kwargs):
-        return Agent(self.root, client or DemoClient(), TestRunner(self.root, "local", 3), **kwargs)
+        # Verificador simulado para os testes unitários da máquina de estados.
+        kwargs.setdefault('acceptance', lambda root: {'passed':True,'verified':True,'tests':1,'output':'fixture'})
+        return Agent(self.root, client or ScriptClient([]), TestRunner(self.root, "local", 3), **kwargs)
 
     def test_demo_repairs_real_failed_tests(self):
         (self.root / "tests").mkdir()
-        (self.root / "solution.py").write_text(CASES[0]["source"])
-        (self.root / "tests/test_factorial.py").write_text(test_source(CASES[0]["checks"]))
-        agent = self.agent()
-        result = agent.run(CASES[0]["task"])
+        (self.root / "solution.py").write_text("def factorial(n): raise NotImplementedError\n")
+        (self.root / "tests/test_factorial.py").write_text("import unittest\nfrom solution import factorial\nclass T(unittest.TestCase):\n    def test_values(self):\n        self.assertEqual(factorial(0), 1)\n        self.assertEqual(factorial(5), 120)\n        with self.assertRaises(ValueError): factorial(-1)\n")
+        agent = self.agent(ScriptClient([SPEC, PLAN,
+            {"tool": "read_file", "args": {"path": "solution.py"}},
+            {"tool": "write_file", "args": {"path": "solution.py", "content": "def factorial(n): return n\n"}},
+            {"tool": "run_tests", "args": {}},
+            {"tool": "write_file", "args": {"path": "solution.py", "content": "def factorial(n):\n    if n < 0: raise ValueError()\n    import math\n    return math.factorial(n)\n"}},
+            {"tool": "run_tests", "args": {}},
+        ]))
+        result = agent.run("Implemente o fatorial")
         self.assertEqual(result["state"], "DONE")
         self.assertEqual(result["iterations"], 2)
         self.assertEqual(result["llm_calls"], 7)
@@ -123,3 +129,36 @@ class AgentTests(unittest.TestCase):
     def test_trace_symlink_rejected(self):
         (self.root / ".minicode").symlink_to(self.root, target_is_directory=True)
         with self.assertRaises(ToolError): self.agent().run("task")
+
+    def test_unexpected_client_error_is_recorded_as_failed(self):
+        class Broken:
+            def complete(self,messages): raise IndexError('invalid protocol')
+        agent = self.agent(Broken())
+        result = agent.run('task')
+        self.assertEqual(result['state'],'FAILED')
+        self.assertEqual(json.loads((agent.run_dir/'state.json').read_text())['state'],'FAILED')
+
+    def test_independent_failure_prevents_done(self):
+        (self.root/'tests').mkdir()
+        (self.root/'tests/test_ok.py').write_text('import unittest\nclass T(unittest.TestCase):\n    def test_ok(self): pass\n')
+        client = ScriptClient([SPEC,PLAN,{'tool':'run_tests','args':{}}])
+        agent = self.agent(client,max_iterations=1,acceptance=lambda root:{'passed':False,'verified':True,'tests':1,'output':'acceptance failed'})
+        self.assertEqual(agent.run('task')['state'],'FAILED')
+        self.assertFalse(agent.last_test['passed'])
+
+    def test_full_output_is_available_by_pages(self):
+        agent = self.agent()
+        agent.last_test = {'output':'a'*20000+'FINAL ERROR'}
+        preview = agent.feedback(agent.last_test)
+        self.assertIn('FINAL ERROR',preview)
+        self.assertIn('truncado',preview)
+        page = agent.call_tool('read_test_output',{'offset':19000})
+        self.assertTrue(page['output'].endswith('FINAL ERROR'))
+
+    def test_done_requires_independent_acceptance(self):
+        (self.root/'tests').mkdir()
+        (self.root/'tests/test_ok.py').write_text('import unittest\nclass T(unittest.TestCase):\n    def test_ok(self): pass\n')
+        client = ScriptClient([SPEC,PLAN,{'tool':'run_tests','args':{}}])
+        agent = self.agent(client,max_iterations=1,acceptance=None)
+        self.assertEqual(agent.run('task')['state'],'FAILED')
+        self.assertIn('independente',agent.last_test['error'])

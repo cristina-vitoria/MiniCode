@@ -73,3 +73,17 @@ class ClientTests(unittest.TestCase):
             with self.assertRaisesRegex(ModelError, "HTTP 401") as caught:
                 QwenClient().complete([])
         self.assertNotIn("secret", str(caught.exception))
+
+    def test_malformed_endpoint_responses_are_model_errors(self):
+        env = {'MINICODE_BASE_URL':'https://example.org/v1','MINICODE_MODEL':'qwen'}
+        for body in [{'choices':[]},{'choices':None},[],{'choices':[{}]},{'choices':[{'message':{'content':None}}]}]:
+            opener = MagicMock()
+            opener.open.return_value.__enter__.return_value.read.return_value = json.dumps(body).encode()
+            with self.subTest(body=body), patch.dict(os.environ,env,clear=True), patch('urllib.request.build_opener',return_value=opener):
+                with self.assertRaises(ModelError):
+                    QwenClient().complete([])
+
+    def test_url_without_hostname_is_rejected(self):
+        with patch.dict(os.environ,{'MINICODE_BASE_URL':'https:///v1','MINICODE_MODEL':'qwen'},clear=True):
+            with self.assertRaises(ModelError):
+                QwenClient()

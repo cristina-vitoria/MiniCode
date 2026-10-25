@@ -3,6 +3,9 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+import json
+import subprocess
+import sys
 
 from minicode.tools import TestRunner, ToolError, Workspace
 
@@ -64,3 +67,82 @@ class ToolsTests(unittest.TestCase):
         self.assertFalse(result["passed"])
         self.assertEqual(result["tests"], 0)
         self.assertEqual(result["discovered"], 1)
+
+    def test_aliases_cannot_overwrite_original_tests(self):
+        for path in ['tests/test_original.py','./tests/test_original.py','tests//test_original.py','tests/./test_original.py']:
+            with self.subTest(path=path), self.assertRaises(ToolError):
+                self.ws.write_file(path,'replaced')
+
+    def test_protection_is_not_limited_to_first_thousand_files(self):
+        for i in range(1001):
+            (self.root / f'a{i:04}.txt').write_text('data')
+        ws = Workspace(self.root)
+        self.assertNotIn('tests/test_original.py',ws.list_files())
+        with self.assertRaises(ToolError):
+            ws.write_file('tests/test_original.py','replaced')
+
+    def test_original_test_changed_outside_tool_is_rejected(self):
+        runner = TestRunner(self.root,'local')
+        (self.root/'tests/test_original.py').write_text('changed')
+        result = runner.run()
+        self.assertFalse(result['passed'])
+        self.assertIn('protegido',result['error'])
+
+    def test_framework_shadowing_is_rejected(self):
+        with self.assertRaises(ToolError):
+            self.ws.write_file('unittest.py','print("Ran 1 test in 0.001s")')
+        (self.root/'unittest.py').write_text('print("Ran 1 test in 0.001s\\nOK")')
+        result = TestRunner(self.root,'local').run()
+        self.assertFalse(result['passed'])
+        self.assertFalse(result['verified'])
+
+    def test_forged_stdout_and_early_exit_are_not_reports(self):
+        (self.root/'tests/test_fake.py').write_text(
+            'import os\nprint("Ran 1 test in 0.001s\\nOK", flush=True)\nos._exit(0)\n')
+        result = TestRunner(self.root,'local').run()
+        self.assertEqual(result['returncode'],0)
+        self.assertFalse(result['verified'])
+        self.assertFalse(result['passed'])
+
+    def test_long_output_keeps_counts_and_full_log(self):
+        (self.root/'tests/test_verbose.py').write_text(
+            'import unittest\nprint("x"*17000,flush=True)\nclass T(unittest.TestCase):\n'
+            '    def test_ok(self): self.assertTrue(True)\n')
+        result = TestRunner(self.root,'local').run()
+        self.assertTrue(result['passed'])
+        self.assertEqual(result['tests'],1)
+        self.assertGreater(len(result['output']),17000)
+
+    def test_snapshot_omits_hidden_and_sensitive_files(self):
+        (self.root/'.env').write_text('DUMMY_SECRET=not-real')
+        (self.root/'secrets.json').write_text('{}')
+        (self.root/'tests/test_filtered.py').write_text(
+            'import unittest\nfrom pathlib import Path\nclass T(unittest.TestCase):\n'
+            '    def test_files(self):\n'
+            '        self.assertFalse(Path(".env").exists())\n'
+            '        self.assertFalse(Path("secrets.json").exists())\n')
+        result = TestRunner(self.root,'local').run()
+        self.assertTrue(result['passed'],result)
+        self.assertNotIn('DUMMY_SECRET',result['output'])
+
+    def test_missing_independent_report_never_passes(self):
+        (self.root/'tests/test_ok.py').write_text('import unittest\nclass T(unittest.TestCase):\n    def test_ok(self): pass\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            oracle = Path(tmp)/'tests'; oracle.mkdir()
+            (oracle/'test_failure.py').write_text('import unittest\nclass T(unittest.TestCase):\n    def test_no(self): self.fail("independent failure")\n')
+            result = TestRunner(self.root,'local',acceptance_dir=oracle).run()
+        self.assertFalse(result['passed'])
+        self.assertIn('independent failure',result['acceptance']['output'])
+
+    def test_keyboard_interrupt_kills_child(self):
+        (self.root/'tests/test_sleep.py').write_text('import time\ntime.sleep(20)\n')
+        processes = []
+        real_popen = subprocess.Popen
+        def start(*args,**kwargs):
+            child = real_popen(*args,**kwargs)
+            processes.append(child)
+            return child
+        with patch('minicode.tools.subprocess.Popen',side_effect=start), patch('minicode.tools.time.sleep',side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                TestRunner(self.root,'local').run()
+        self.assertIsNotNone(processes[0].poll())

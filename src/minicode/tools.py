@@ -1,8 +1,7 @@
-"""Ferramentas restritas e execução de testes com comando fixo."""
-import hashlib
+"""Ferramentas públicas e runner com snapshot, launcher isolado e relatório próprio."""
+import json
 import os
 from pathlib import Path
-import re
 import signal
 import subprocess
 import sys
@@ -10,139 +9,153 @@ import tempfile
 import time
 import uuid
 
+from .workspace import Workspace, ToolError, copy_filtered, RESERVED_MODULES
 
-class ToolError(ValueError):
-    pass
-
-
-class Workspace:
-    def __init__(self, root):
-        self.root = Path(root).resolve(strict=True)
-        if not self.root.is_dir():
-            raise ToolError("Projeto deve ser diretório")
-        self.original_tests = {p for p in self.list_files() if self.is_test(p)}
-        self.revision = 0
-        self.changed = set()
-
-    @staticmethod
-    def is_test(name):
-        p = Path(name)
-        return "tests" in p.parts or p.name.startswith("test_") or p.name.endswith("_test.py")
-
-    def path(self, name, write=False):
-        p = Path(name)
-        if not name or p.is_absolute() or ".." in p.parts:
-            raise ToolError("Caminho deve ser relativo e interno ao projeto")
-        if any(part.startswith(".") or part in {"__pycache__", "node_modules", "venv"} for part in p.parts):
-            raise ToolError("Diretório oculto ou reservado")
-        if p.suffix in {".pem", ".key"} or p.name.lower() in {"credentials", "secrets.json"}:
-            raise ToolError("Arquivo sensível")
-        current = self.root
-        for part in p.parts:
-            current = current / part
-            if current.is_symlink():
-                raise ToolError("Links simbólicos não são permitidos")
-        resolved = current.resolve()
-        if not resolved.is_relative_to(self.root):
-            raise ToolError("Caminho fora do projeto")
-        if current.exists() and current.is_file() and current.stat().st_nlink > 1:
-            raise ToolError("Hard links não são permitidos")
-        if write and name in self.original_tests:
-            raise ToolError("Testes preexistentes são protegidos contra alteração")
-        return current
-
-    def list_files(self):
-        result = []
-        for folder, dirs, files in os.walk(self.root, followlinks=False):
-            dirs[:] = sorted(d for d in dirs if not d.startswith(".") and d not in {"__pycache__", "node_modules", "venv"} and not (Path(folder) / d).is_symlink())
-            for filename in sorted(files):
-                name = (Path(folder) / filename).relative_to(self.root).as_posix()
-                try:
-                    self.path(name)
-                    result.append(name)
-                except ToolError:
-                    continue
-                if len(result) >= 1000:
-                    return result
-        return result
-
-    def read_file(self, path):
-        p = self.path(path)
-        if p.stat().st_size > 40_000:
-            raise ToolError("Arquivo excede 40 KB; divida-o antes de usar MiniCode")
-        return p.read_text(encoding="utf-8")
-
-    def write_file(self, path, content):
-        if not isinstance(content, str) or len(content.encode()) > 40_000:
-            raise ToolError("Conteúdo inválido ou maior que 40 KB")
-        p = self.path(path, write=True)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
-        self.revision += 1
-        self.changed.add(path)
-        return {"path": path, "revision": self.revision, "sha256": hashlib.sha256(content.encode()).hexdigest()}
-
-    def search_code(self, query):
-        if not isinstance(query, str) or not query:
-            raise ToolError("Busca vazia")
-        results = []
-        for name in self.list_files():
-            try:
-                for n, line in enumerate(self.read_file(name).splitlines(), 1):
-                    if query in line:
-                        results.append({"path": name, "line": n, "text": line[:300]})
-                    if len(results) >= 50:
-                        return results
-            except (UnicodeError, OSError, ToolError):
-                continue
-        return results
+MAX_OUTPUT = 1_000_000
 
 
 class TestRunner:
-    def __init__(self, root, mode="docker", timeout=30):
-        if mode not in {"docker", "local"} or timeout < 1:
-            raise ValueError("Runner ou timeout inválido")
-        self.root, self.mode, self.timeout = Path(root).resolve(), mode, timeout
+    def __init__(self, root, mode="docker", timeout=30, profile="unittest", python=None,
+                 image="minicode-tests:parte1", acceptance_dir=None):
+        if mode not in {"docker", "local"} or profile not in {"pytest", "unittest"} or timeout < 1:
+            raise ValueError("Runner, perfil ou timeout inválido")
+        self.root = Path(root).resolve()
+        self.mode, self.timeout, self.profile = mode, timeout, profile
+        self.python = str(Path(python).absolute()) if python else sys.executable
+        self.image = image
+        self.acceptance_dir = Path(acceptance_dir).resolve() if acceptance_dir else None
+        if self.acceptance_dir and (not self.acceptance_dir.is_dir() or self.acceptance_dir.is_relative_to(self.root)
+                                    or self.root.is_relative_to(self.acceptance_dir)):
+            raise ValueError("Aceitação deve ser um diretório confiável fora do projeto")
+        self.workspace = Workspace(root)
+
+    @property
+    def description(self):
+        return f"{self.profile} pelo launcher confiável; sem comandos arbitrários"
 
     def run(self):
-        test_args = ["-m", "unittest", "discover", "-s", "tests", "-v"]
-        name = "minicode-" + uuid.uuid4().hex
-        if self.mode == "docker":
-            command = ["docker", "run", "--rm", "--name", name, "--network=none",
-                       "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
-                       "--pids-limit=64", "--memory=256m", "--cpus=1",
-                       "--user", f"{os.getuid()}:{os.getgid()}", "--tmpfs", "/tmp:rw,nosuid,size=32m",
-                       "-e", "PYTHONDONTWRITEBYTECODE=1", "-v", f"{self.root}:/workspace:ro",
-                       "-w", "/workspace", "python:3.12-slim", "python", *test_args]
-        else:
-            command = [sys.executable, "-B", *test_args]
+        result = self.run_suite()
+        if result["passed"] and self.acceptance_dir:
+            acceptance = self.run_suite(self.acceptance_dir)
+            result["acceptance"] = acceptance
+            result["passed"] = acceptance["passed"] and result["source_digest"] == acceptance["source_digest"]
+            result["verified"] = result["verified"] and acceptance["verified"]
+        return result
+
+    def run_suite(self, trusted_tests=None):
+        started = time.monotonic()
+        result = {"passed": False, "verified": False, "tests": 0, "discovered": 0,
+                  "returncode": None, "timed_out": False, "output": "", "source_digest": None}
+        try:
+            self.workspace.verify_protected()
+            digest = self.workspace.digest()
+            # Recusa sombreamento mesmo quando o arquivo já existia antes do agente.
+            for path in self.root.iterdir():
+                if path.name.removesuffix(".py") in RESERVED_MODULES:
+                    raise ToolError(f"Nome reservado no projeto: {path.name}")
+            with tempfile.TemporaryDirectory(prefix="minicode-run-") as temporary:
+                base = Path(temporary)
+                project = base / "project"
+                copy_filtered(self.root, project)
+                if Workspace(project).digest() != digest:
+                    raise ToolError("Projeto mudou durante a cópia")
+                trusted = base / "trusted"
+                trusted.mkdir()
+                for name in ("_test_worker.py", "runner.ini"):
+                    (trusted / name).write_bytes(Path(__file__).with_name(name).read_bytes())
+                if trusted_tests:
+                    # Os testes e conftest do candidato não entram na aceitação independente.
+                    import shutil
+                    shutil.rmtree(project / "tests", ignore_errors=True)
+                    copy_filtered(trusted_tests, trusted / "acceptance")
+                out = base / "result"
+                out.mkdir()
+                snapshot_digest = Workspace(project).digest()
+                name = "minicode-" + uuid.uuid4().hex
+                if self.mode == "docker":
+                    command = ["docker", "run", "--rm", "--name", name, "--network=none", "--read-only",
+                               "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=64",
+                               "--memory=256m", "--cpus=1", "--user", f"{os.getuid()}:{os.getgid()}",
+                               "--tmpfs", "/tmp:rw,nosuid,size=32m", "-e", "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1",
+                               "-v", f"{project}:/workspace:ro", "-v", f"{trusted}:/trusted:ro",
+                               "-v", f"{out}:/result:rw", "-w", "/workspace", self.image,
+                               "python", "-I", "-B", "/trusted/_test_worker.py", "/workspace", self.profile,
+                               "/result/report.json", "/trusted/acceptance" if trusted_tests else ""]
+                else:
+                    command = [self.python, "-I", "-B", str(trusted / "_test_worker.py"), str(project),
+                               self.profile, str(out / "report.json"), str(trusted / "acceptance") if trusted_tests else ""]
+                result.update(self._execute(command, base, name))
+                report_path = out / "report.json"
+                report = None
+                if report_path.is_file() and not report_path.is_symlink() and report_path.stat().st_size < 10000:
+                    try:
+                        report = json.loads(report_path.read_text(encoding="utf-8"))
+                    except (ValueError, OSError):
+                        pass
+                valid = (isinstance(report, dict) and report.get("protocol") == 1
+                         and report.get("completed") is True and type(report.get("passed")) is bool
+                         and all(type(report.get(key)) is int and report[key] >= 0
+                                 for key in ("tests", "discovered", "failed", "skipped"))
+                         and report["tests"] <= report["discovered"])
+                self.workspace.verify_protected()
+                unchanged = self.workspace.digest() == digest and Workspace(project).digest() == snapshot_digest
+                if valid:
+                    result.update(tests=report["tests"], discovered=report["discovered"], skipped=report["skipped"])
+                result.update(source_digest=digest, verified=bool(valid and unchanged and not result["timed_out"]),
+                              passed=bool(valid and unchanged and not result["timed_out"]
+                                          and result["returncode"] == 0 and report["passed"]
+                                          and report["tests"] > 0 and report["failed"] == 0
+                                          and (not trusted_tests or report["skipped"] == 0)))
+                if not valid:
+                    result["error"] = "Relatório de testes ausente, incompleto ou inválido"
+                if not unchanged:
+                    result["error"] = "Projeto alterado durante a verificação"
+        except (OSError, ToolError, ValueError) as exc:
+            result.update(passed=False, verified=False, error=str(exc))
+        result["seconds"] = time.monotonic() - started
+        return result
+
+    def _execute(self, command, base, container_name):
         env = {k: v for k, v in os.environ.items() if k in {"PATH", "SYSTEMROOT", "DOCKER_HOST", "XDG_RUNTIME_DIR"}}
-        env.update({"PYTHONDONTWRITEBYTECODE": "1", "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"})
-        start = time.monotonic()
+        env.update(PYTEST_DISABLE_PLUGIN_AUTOLOAD="1", HOME=str(base))
+        process = None
+        interrupted = True
         timed_out = False
+        started = time.monotonic()
         try:
             with tempfile.TemporaryFile() as output:
-                proc = subprocess.Popen(command, cwd=self.root, env=env, stdout=output,
-                                        stderr=subprocess.STDOUT, start_new_session=True)
-                while proc.poll() is None:
-                    if time.monotonic() - start > self.timeout or output.tell() > 1_000_000:
+                process = subprocess.Popen(command, cwd=base, env=env, stdout=output,
+                                           stderr=subprocess.STDOUT, start_new_session=True)
+                while process.poll() is None:
+                    if time.monotonic() - started > self.timeout or os.fstat(output.fileno()).st_size > MAX_OUTPUT:
                         timed_out = True
-                        os.killpg(proc.pid, signal.SIGKILL)
+                        self._kill(process)
                         break
                     time.sleep(0.02)
-                proc.wait()
+                process.wait()
                 output.seek(0)
-                log = output.read(16_000).decode("utf-8", errors="replace")
-            counts = re.findall(r"Ran (\d+) tests? in", log)
-            count = int(counts[-1]) if counts else 0
-            skipped = re.findall(r"skipped=(\d+)", log)
-            executed = count - (int(skipped[-1]) if skipped else 0)
-            return {"passed": proc.returncode == 0 and executed > 0 and not timed_out,
-                    "returncode": proc.returncode, "tests": executed, "discovered": count, "output": log,
-                    "timed_out": timed_out, "command": command, "seconds": time.monotonic() - start}
-        except OSError:
-            return {"passed": False, "tests": 0, "output": "Runner indisponível; confira Docker ou Python", "command": command}
+                data = output.read(MAX_OUTPUT + 1)
+                if len(data) > MAX_OUTPUT:
+                    timed_out = True
+                interrupted = False
+                # Saída completa até o orçamento; contagem não depende do texto.
+                return {"returncode": process.returncode, "timed_out": timed_out,
+                        "output": data[:MAX_OUTPUT].decode("utf-8", errors="replace"), "command": command}
         finally:
-            if self.mode == "docker" and timed_out:
-                subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL, timeout=10, check=False)
+            if process is not None:
+                # Mata também descendentes que tenham sobrevivido ao processo principal.
+                self._kill(process)
+            if self.mode == "docker" and (timed_out or interrupted):
+                try:
+                    subprocess.run(["docker", "rm", "-f", container_name], stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, timeout=10, check=False)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+
+    @staticmethod
+    def _kill(process):
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()

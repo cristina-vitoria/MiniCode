@@ -24,7 +24,7 @@ class QwenClient:
         parsed = urlparse(base)
         if not base or not self.model:
             raise ModelError("Defina MINICODE_BASE_URL e MINICODE_MODEL no .env do diretório atual, em --env-file ou no ambiente")
-        if parsed.scheme != "https" and not (parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1"}):
+        if not parsed.hostname or (parsed.scheme != "https" and not (parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1"})):
             raise ModelError("Use HTTPS (HTTP permitido apenas em localhost)")
         if parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise ModelError("URL deve conter somente endereço e caminho, sem credenciais")
@@ -40,17 +40,22 @@ class QwenClient:
                 body = response.read(2_000_001)
             if len(body) > 2_000_000:
                 raise ModelError("Resposta excede limite")
-            content = json.loads(body)["choices"][0]["message"]["content"]
+            data = json.loads(body)
+            if not isinstance(data, dict) or not isinstance(data.get("choices"), list) or not data["choices"]:
+                raise ValueError("Resposta sem choices")
+            content = data["choices"][0]["message"]["content"]
             if not isinstance(content, str):
                 raise ValueError()
             return content
         except urllib.error.HTTPError as exc:
             raise ModelError(f"Endpoint retornou HTTP {exc.code}") from None
-        except (urllib.error.URLError, TimeoutError, OSError, KeyError, ValueError, TypeError):
+        except (urllib.error.URLError, TimeoutError, OSError, KeyError, IndexError, ValueError, TypeError):
             raise ModelError("Falha de conexão ou resposta inválida do endpoint") from None
 
 
 def parse_object(text):
+    if not isinstance(text, str):
+        raise ValueError("Resposta deve ser texto JSON")
     text = text.strip()
     if text.startswith("```json") and text.endswith("```"):
         text = text[7:-3].strip()

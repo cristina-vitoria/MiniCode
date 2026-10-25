@@ -9,8 +9,15 @@ description = "Agente de programação com especificação, hard gates e repair 
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+test = ["Flask>=3.1,<3.2", "pytest>=8.4,<9"]
+
 [project.scripts]
 minicode = "minicode.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["minicode"]
+
+[tool.setuptools.package-data]
+minicode = ["runner.ini", "acceptance/*.py"]

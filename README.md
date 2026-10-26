@@ -2,8 +2,6 @@
 
 Agente de programação em Python, com cliente para Qwen via endpoint compatível com Chat Completions. A LLM produz especificação, plano e propostas de ferramentas; o harness controla os estados, executa a verificação e decide o resultado.
 
-A CLI e o avaliador não dependem de `benchmark.py` nem da antiga demo. A avaliação usa as seis tarefas reais de [softwareteste](softwareteste/README.md), preservando o projeto-base e seus defeitos intencionais.
-
 ## Instalar
 
 Requer Python 3.11+ e Linux para o runner de processos. Na raiz:

@@ -10,15 +10,17 @@ from .llm import ModelError, QwenClient
 from .tasks import TASKS, TaskAcceptance, contract_issues, prompts
 from .tools import TestRunner, ToolError
 from .workspace import copy_filtered
+from .tool_selector import OpenAICompatibleToolSelector
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description='MiniCode — agente de programação, Parte 1')
+    parser = argparse.ArgumentParser(description='MiniCode — agente de programação')
     parser.add_argument('--project',default='.',help='Diretório do projeto alvo')
     parser.add_argument('--source',default='softwareteste',help='Projeto-base das seis tarefas')
     parser.add_argument('--task',help='Solicitação; omitida = entrada interativa')
     parser.add_argument('--task-id',choices=[task.id for task in TASKS],help='Enunciado e aceitação independentes de softwareteste')
     parser.add_argument('--env-file',help='Arquivo de configuração do endpoint')
+    parser.add_argument('--tool-selector-env-file', help='Configuração de endpoint local/Colab do seletor LoRA; mantém Qwen para as demais funções')
     parser.add_argument('--allow-local-tests',action='store_true',help='Executar Python confiável no host, sem sandbox')
     parser.add_argument('--test-profile',choices=['unittest','pytest'],default='unittest')
     parser.add_argument('--test-python',help='Interpretador preparado para os testes locais')
@@ -51,7 +53,9 @@ def main(argv=None):
         if args.evaluate:
             result = evaluate(lambda:QwenClient(args.env_file),args.evaluate,mode,args.max_iterations,
                               args.max_actions,args.max_llm_calls,args.timeout,args.source,args.test_python,
-                              args.test_image,progress)
+                              args.test_image,progress,
+                              (lambda: OpenAICompatibleToolSelector(QwenClient(args.tool_selector_env_file)))
+                              if args.tool_selector_env_file else None)
             print(json.dumps(result['metrics'],indent=2))
             return 0 if result['complete'] else 1
         acceptance = None
@@ -76,10 +80,11 @@ def main(argv=None):
             instruction = args.task or input('MiniCode > ')
             profile = args.test_profile
         runner = TestRunner(args.project,mode,args.timeout,profile,args.test_python,args.test_image,args.acceptance_tests)
+        selector = OpenAICompatibleToolSelector(QwenClient(args.tool_selector_env_file)) if args.tool_selector_env_file else None
         agent = Agent(args.project,QwenClient(args.env_file),runner,max_iterations=args.max_iterations,
                       max_actions=args.max_actions,max_llm_calls=args.max_llm_calls,progress=progress,
                       acceptance=acceptance,editable_paths=editable_paths,required_paths=required_paths,
-                      preflight=preflight)
+                      preflight=preflight, tool_selector=selector)
         result = agent.run(instruction)
         print(json.dumps(result,indent=2,ensure_ascii=False))
         return 0 if result['state'] == 'DONE' else 1

@@ -8,6 +8,7 @@ import uuid
 from .llm import ModelError, TransientModelError, parse_object
 from .tools import Workspace, TestRunner, ToolError
 from .contracts import Acceptance, ModelClient, Runner
+from .tool_selector import TOOLS, ToolSelector
 
 
 class State(str, Enum):
@@ -61,7 +62,7 @@ class Agent:
     def __init__(self, project, client: ModelClient, runner: Runner | None = None, max_iterations: int = 3, max_actions: int = 20,
                  max_llm_calls: int = 80, context_chars: int = 48000, progress=None,
                  acceptance: Acceptance | None = None, editable_paths=None, required_paths=None,
-                 preflight=None):
+                 preflight=None, tool_selector: ToolSelector | None = None):
         if min(max_iterations, max_actions, max_llm_calls) < 1 or context_chars < 8000:
             raise ValueError("Limites devem ser positivos; contexto mínimo 8000 caracteres")
         self.workspace = Workspace(project, editable_paths=editable_paths)
@@ -84,6 +85,7 @@ class Agent:
         self.run_dir = None
         self.acceptance = acceptance
         self._verified_digest = None
+        self.tool_selector = tool_selector
 
     def event(self, kind, **data):
         record = {"time": datetime.now(timezone.utc).isoformat(), "kind": kind,
@@ -455,7 +457,22 @@ class Agent:
                 self.iterations += 1
                 self.transition(State.IMPLEMENTING)
                 for _ in range(self.max_actions):
-                    action = self.ask('Escolha UMA ação JSON: {"tool":"list_files|read_file|write_file|replace_text|replace_python_function|search_code|run_tests|read_test_output", "args":{...}}.\nAssinaturas: list_files(); read_file(path); write_file(path,content); replace_text(path,old,new), com old ocorrendo exatamente uma vez; replace_python_function(path,name,content), com content contendo a função alvo completa e, opcionalmente, novas auxiliares de módulo; search_code(query); run_tests(); read_test_output(offset=0).\nUse replace_text só com trecho old único. Para mudar uma função inteira, use replace_python_function. run_tests encerra a tentativa. Arquivos obrigatórios antes do primeiro teste: ' + json.dumps(sorted(self.required_paths), ensure_ascii=False) + '. Antes de testar, confirme que todos os arquivos/componentes pedidos foram tratados. Runner: ' + self.runner.description + '\nFeedback da última ação:\n' + self.feedback(feedback))
+                    selected_tool = None
+                    if self.tool_selector:
+                        decision = self.tool_selector.select(
+                            state=self.state.value, task=self.task, specification=self.spec,
+                            plan=self.plan, feedback=feedback)
+                        selected_tool = decision.tool
+                        # A sugestão é auditada, mas não ganha privilégios: a LLM
+                        # principal ainda fornece argumentos, que call_tool valida.
+                        self.event("tool_selection", tool=selected_tool, source=decision.source)
+                    tools_text = selected_tool or "|".join(sorted(TOOLS))
+                    action = self.ask('Escolha UMA ação JSON: {"tool":"' + tools_text + '", "args":{...}}.\nAssinaturas: list_files(); read_file(path); write_file(path,content); replace_text(path,old,new), com old ocorrendo exatamente uma vez; replace_python_function(path,name,content), com content contendo a função alvo completa e, opcionalmente, novas auxiliares de módulo; search_code(query); run_tests(); read_test_output(offset=0).\nUse replace_text só com trecho old único. Para mudar uma função inteira, use replace_python_function. run_tests encerra a tentativa. Arquivos obrigatórios antes do primeiro teste: ' + json.dumps(sorted(self.required_paths), ensure_ascii=False) + '. Antes de testar, confirme que todos os arquivos/componentes pedidos foram tratados. Runner: ' + self.runner.description + '\nFeedback da última ação:\n' + self.feedback(feedback))
+                    if selected_tool and action.get("tool") != selected_tool:
+                        feedback = {"error": "Ação recusada: diverge da ferramenta selecionada", "selected_tool": selected_tool}
+                        self.event("tool_selection_rejected", selected_tool=selected_tool,
+                                   proposed_tool=action.get("tool"))
+                        continue
                     try:
                         feedback = self.call_tool(action.get("tool"), action.get("args", {}))
                         if (action.get("tool") in {"write_file", "replace_text", "replace_python_function"}

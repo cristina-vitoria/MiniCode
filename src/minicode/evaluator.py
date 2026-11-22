@@ -24,7 +24,7 @@ def metrics(rows):
 
 def evaluate(client_factory, output, mode='docker', max_iterations=3, max_actions=20,
              max_llm_calls=80, timeout=30, source='softwareteste', python=None,
-             image='minicode-tests:parte1', progress=None):
+             image='minicode-tests:parte1', progress=None, tool_selector_factory=None):
     if min(max_iterations,max_actions,max_llm_calls,timeout) < 1 or mode not in {'docker','local'}:
         raise ValueError('Modo ou limites inválidos')
     source = Path(source).resolve(strict=True)
@@ -37,7 +37,8 @@ def evaluate(client_factory, output, mode='docker', max_iterations=3, max_action
              'llm_calls':0,'changed_files':[],'trace':None,'acceptance':None,'seconds':0.0} for task in TASKS]
     config = {'mode':mode,'profile':'pytest','max_iterations':max_iterations,'max_actions':max_actions,
               'max_llm_calls':max_llm_calls,'timeout':timeout,'image':image,'python':python or platform.python_version(),
-              'source_digest':Workspace(source).digest(),'started_at':datetime.now(timezone.utc).isoformat()}
+              'source_digest':Workspace(source).digest(),'started_at':datetime.now(timezone.utc).isoformat(),
+              'tool_selector': bool(tool_selector_factory)}
     finished = False
 
     def save():
@@ -67,7 +68,8 @@ def evaluate(client_factory, output, mode='docker', max_iterations=3, max_action
                               progress=progress,acceptance=acceptance,
                               editable_paths=set(task.editable) | {'tests/' + task.test_file},
                               required_paths=set(task.required) | {'tests/' + task.test_file},
-                              preflight=lambda root, task_id=task.id: contract_issues(task_id, root))
+                              preflight=lambda root, task_id=task.id: contract_issues(task_id, root),
+                              tool_selector=tool_selector_factory() if tool_selector_factory else None)
                 row.update(agent.run(instructions[task.id]))
                 row['acceptance'] = agent.last_test.get('acceptance') if agent.last_test else None
                 row['success'] = bool(row['state'] == 'DONE' and row['acceptance']

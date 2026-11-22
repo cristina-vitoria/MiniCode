@@ -1,6 +1,8 @@
-# MiniCode — Parte 1
+# MiniCode — Parte 1 e Parte 2
 
 Agente de programação em Python, com cliente para Qwen via endpoint compatível com Chat Completions. A LLM produz especificação, plano e propostas de ferramentas; o harness controla os estados, executa a verificação e decide o resultado.
+
+Para a Parte 2, há uma especialização opcional e isolada para escolha da próxima ferramenta. Consulte [docs/parte2.md](docs/parte2.md): ela traz hipótese, dados, prevenção de vazamento, notebook Colab, protocolo de comparação e pendências experimentais. O seletor não substitui os hard gates nem recebe acesso a shell ou escrita.
 
 ## Instalar
 

@@ -39,11 +39,113 @@ class ToolsTests(unittest.TestCase):
         self.assertEqual(self.ws.revision, 1)
         self.assertIn("tests/test_new.py", self.ws.changed)
 
+    def test_rejects_invalid_python_and_noop_writes(self):
+        with self.assertRaisesRegex(ToolError, "Python inválido"):
+            self.ws.write_file("broken.py", 'def broken(:\n')
+        self.ws.write_file("valid.py", "answer = 42\n")
+        with self.assertRaisesRegex(ToolError, "sem alteração"):
+            self.ws.write_file("valid.py", "answer = 42\n")
+        self.assertEqual(self.ws.revision, 1)
+
+    def test_normalizes_accidentally_double_escaped_python_newlines(self):
+        result = self.ws.write_file(
+            "tests/test_new.py", "def test_one(): pass\\n\\ndef test_two(): pass\n")
+        self.assertTrue(result["normalized_escaped_newlines"])
+        self.assertIn("\n\ndef test_two", self.ws.read_file("tests/test_new.py"))
+
+    def test_replace_text_requires_one_match_and_valid_result(self):
+        self.ws.write_file("calculation.py", "divisor = 1000\n")
+        result = self.ws.replace_text("calculation.py", "1000", "100")
+        self.assertEqual(self.ws.read_file("calculation.py"), "divisor = 100\n")
+        self.assertEqual(result["revision"], 2)
+        with self.assertRaisesRegex(ToolError, "encontradas: 0"):
+            self.ws.replace_text("calculation.py", "missing", "value")
+        with self.assertRaisesRegex(ToolError, "Python inválido"):
+            self.ws.replace_text("calculation.py", "divisor = 100", "def broken(")
+
+    def test_can_freeze_new_tests_after_first_verification(self):
+        self.ws.write_file("tests/test_new.py", "def test_new(): pass\n")
+        self.assertEqual(self.ws.protect_current_tests(), ["tests/test_new.py"])
+        with self.assertRaisesRegex(ToolError, "Teste congelado"):
+            self.ws.write_file("tests/test_new.py", "def test_new(): assert True\n")
+        self.assertEqual(self.ws.protect_current_tests(), [])
+        self.assertEqual(self.ws.unprotect_generated_tests(), ["tests/test_new.py"])
+        self.ws.write_file("tests/test_new.py", "def test_new(): assert True\n")
+        with self.assertRaisesRegex(ToolError, "protegidos"):
+            self.ws.write_file("tests/test_original.py", "def test_original(): assert True\n")
+
     def test_search_read_and_size_limit(self):
         self.ws.write_file("src/app.py", "answer = 42\n")
         self.assertEqual(self.ws.search_code("answer")[0]["line"], 1)
         self.assertEqual(self.ws.read_file("src/app.py"), "answer = 42\n")
         with self.assertRaises(ToolError): self.ws.write_file("huge.py", "x" * 40001)
+
+    def test_write_scope_rejects_files_outside_task(self):
+        (self.root / "app.py").write_text("VALUE = 1\n")
+        scoped = Workspace(self.root, editable_paths={"tests/test_new.py"})
+        scoped.write_file("tests/test_new.py", "def test_new(): pass\n")
+        with self.assertRaisesRegex(ToolError, "fora do escopo"):
+            scoped.write_file("app.py", "VALUE = 2\n")
+
+    def test_original_python_api_cannot_be_removed(self):
+        (self.root / "module.py").write_text(
+            "import math\n\ndef health(): return True\n\ndef target(): return math.pi\n")
+        workspace = Workspace(self.root)
+        with self.assertRaisesRegex(ToolError, "remove ou altera APIs/imports"):
+            workspace.write_file("module.py", "def target(): return 3\n")
+        workspace.replace_text("module.py", "return math.pi", "return math.tau")
+
+    def test_original_function_signature_cannot_be_changed(self):
+        (self.root / "module.py").write_text(
+            "def calculate(value: int, rate: int = 1) -> int:\n    return value * rate\n")
+        workspace = Workspace(self.root)
+        with self.assertRaisesRegex(ToolError, "remove ou altera APIs/imports"):
+            workspace.replace_python_function(
+                "module.py", "calculate",
+                "def calculate(value: int, rate: float = 1) -> int:\n    return int(value * rate)\n")
+        workspace.replace_text("module.py", "return value * rate", "return value * rate // 1")
+
+    def test_replace_python_function_is_local_and_preserves_other_functions(self):
+        (self.root / "module.py").write_text(
+            "def health(): return True\n\ndef target():\n    return 1\n")
+        workspace = Workspace(self.root)
+        workspace.replace_python_function("module.py", "target", "def target():\n    return 2\n")
+        self.assertEqual(workspace.read_file("module.py"),
+                         "def health(): return True\n\ndef target():\n    return 2\n")
+        with self.assertRaisesRegex(ToolError, "função alvo"):
+            workspace.replace_python_function("module.py", "target", "def renamed(): return 3\n")
+
+    def test_replace_python_function_can_add_helpers_and_normalize_newlines(self):
+        (self.root / "module.py").write_text(
+            "def health(): return True\n\ndef target(value):\n    return value\n")
+        workspace = Workspace(self.root)
+        result = workspace.replace_python_function(
+            "module.py", "target",
+            "def helper(value): return value * 2\\n\\ndef target(value): return helper(value)\n")
+        self.assertTrue(result["normalized_escaped_newlines"])
+        content = workspace.read_file("module.py")
+        self.assertIn("def health()", content)
+        self.assertIn("def helper(value)", content)
+        self.assertIn("def target(value)", content)
+        self.assertEqual(content.count("def target"), 1)
+
+    def test_new_local_import_cycle_is_rejected(self):
+        package = self.root / "app"
+        package.mkdir()
+        (package / "__init__.py").write_text("")
+        (package / "a.py").write_text("from .b import value\n")
+        (package / "b.py").write_text("value = 1\n")
+        workspace = Workspace(self.root)
+        with self.assertRaisesRegex(ToolError, "Import circular"):
+            workspace.write_file("app/b.py", "from .a import value\n")
+
+    def test_accepted_production_can_be_frozen(self):
+        (self.root / "app.py").write_text("VALUE = 1\n")
+        workspace = Workspace(self.root)
+        workspace.write_file("app.py", "VALUE = 2\n")
+        self.assertEqual(workspace.protect_changed_production(), ["app.py"])
+        with self.assertRaisesRegex(ToolError, "Produção aprovada"):
+            workspace.write_file("app.py", "VALUE = 3\n")
 
     def test_empty_suite_is_failure(self):
         result = TestRunner(self.root, "local").run()

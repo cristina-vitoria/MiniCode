@@ -10,6 +10,10 @@ class ModelError(RuntimeError):
     pass
 
 
+class TransientModelError(ModelError):
+    """Falha segura para retentativa pelo orquestrador, que controla o orçamento."""
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise ModelError("Redirecionamento do endpoint recusado")
@@ -31,7 +35,9 @@ class QwenClient:
         self.url = base + "/chat/completions"
 
     def complete(self, messages):
-        payload = {"model": self.model, "messages": messages, "temperature": 0.1,
+        # Temperatura zero reduz a variância entre baterias e torna as métricas
+        # experimentais mais comparáveis para o mesmo modelo e conjunto de tarefas.
+        payload = {"model": self.model, "messages": messages, "temperature": 0.0,
                    "max_tokens": 4096}
         request = urllib.request.Request(self.url, data=json.dumps(payload).encode(),
                   headers={"Content-Type": "application/json", "Authorization": "Bearer " + self.key})
@@ -48,9 +54,13 @@ class QwenClient:
                 raise ValueError()
             return content
         except urllib.error.HTTPError as exc:
+            if exc.code in {408, 429, 500, 502, 503, 504}:
+                raise TransientModelError(f"Endpoint temporariamente indisponível: HTTP {exc.code}") from None
             raise ModelError(f"Endpoint retornou HTTP {exc.code}") from None
-        except (urllib.error.URLError, TimeoutError, OSError, KeyError, IndexError, ValueError, TypeError):
-            raise ModelError("Falha de conexão ou resposta inválida do endpoint") from None
+        except (urllib.error.URLError, TimeoutError, OSError):
+            raise TransientModelError("Falha temporária de conexão com o endpoint") from None
+        except (KeyError, IndexError, ValueError, TypeError):
+            raise ModelError("Resposta inválida do endpoint") from None
 
 
 def parse_object(text):

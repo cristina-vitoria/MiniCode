@@ -8,7 +8,7 @@ import tempfile
 import time
 
 from .agent import Agent
-from .tasks import TASKS, VERSION, TaskAcceptance, prompts
+from .tasks import TASKS, VERSION, TaskAcceptance, contract_issues, prompts
 from .tools import TestRunner
 from .workspace import Workspace, copy_filtered
 
@@ -64,7 +64,10 @@ def evaluate(client_factory, output, mode='docker', max_iterations=3, max_action
                 runner = TestRunner(root,mode,timeout,profile='pytest',python=python,image=image)
                 acceptance = TaskAcceptance(task,baseline,mode,timeout,python,image)
                 agent = Agent(root,client,runner,max_iterations,max_actions,max_llm_calls,
-                              progress=progress,acceptance=acceptance)
+                              progress=progress,acceptance=acceptance,
+                              editable_paths=set(task.editable) | {'tests/' + task.test_file},
+                              required_paths=set(task.required) | {'tests/' + task.test_file},
+                              preflight=lambda root, task_id=task.id: contract_issues(task_id, root))
                 row.update(agent.run(instructions[task.id]))
                 row['acceptance'] = agent.last_test.get('acceptance') if agent.last_test else None
                 row['success'] = bool(row['state'] == 'DONE' and row['acceptance']

@@ -7,7 +7,7 @@ import sys
 from .agent import Agent
 from .evaluator import evaluate
 from .llm import ModelError, QwenClient
-from .tasks import TASKS, TaskAcceptance, prompts
+from .tasks import TASKS, TaskAcceptance, contract_issues, prompts
 from .tools import TestRunner, ToolError
 from .workspace import copy_filtered
 
@@ -55,6 +55,9 @@ def main(argv=None):
             print(json.dumps(result['metrics'],indent=2))
             return 0 if result['complete'] else 1
         acceptance = None
+        editable_paths = None
+        required_paths = None
+        preflight = None
         if args.task_id:
             task = next(task for task in TASKS if task.id == args.task_id)
             source = Path(args.source).resolve()
@@ -63,6 +66,9 @@ def main(argv=None):
                 raise ValueError('Prepare a tarefa em uma cópia fora do projeto-base')
             instruction = prompts(source)[task.id]
             acceptance = TaskAcceptance(task,source,mode,args.timeout,args.test_python,args.test_image)
+            editable_paths = set(task.editable) | {'tests/' + task.test_file}
+            required_paths = set(task.required) | {'tests/' + task.test_file}
+            preflight = lambda root, task_id=task.id: contract_issues(task_id, root)
             profile = 'pytest'
         else:
             if not args.acceptance_tests:
@@ -71,7 +77,9 @@ def main(argv=None):
             profile = args.test_profile
         runner = TestRunner(args.project,mode,args.timeout,profile,args.test_python,args.test_image,args.acceptance_tests)
         agent = Agent(args.project,QwenClient(args.env_file),runner,max_iterations=args.max_iterations,
-                      max_actions=args.max_actions,max_llm_calls=args.max_llm_calls,progress=progress,acceptance=acceptance)
+                      max_actions=args.max_actions,max_llm_calls=args.max_llm_calls,progress=progress,
+                      acceptance=acceptance,editable_paths=editable_paths,required_paths=required_paths,
+                      preflight=preflight)
         result = agent.run(instruction)
         print(json.dumps(result,indent=2,ensure_ascii=False))
         return 0 if result['state'] == 'DONE' else 1

@@ -91,7 +91,9 @@ Falhas ou esgotamento de limites levam a `FAILED`. `DONE` exige:
 
 1. Especificação e plano validados antes das escritas.
 2. Relatório estruturado completo do launcher, execução terminada corretamente e testes efetivamente executados.
-3. Aprovação dos testes do projeto e da aceitação independente configurada.
+3. Aprovação dos testes do projeto e da aceitação independente configurada. A aceitação também
+   é executada quando a suíte do projeto falha, para fornecer ao repair loop um sinal externo
+   capaz de identificar testes novos que contradizem o contrato.
 4. Integridade dos arquivos protegidos e digest da mesma revisão que foi verificada.
 
 Imprimir `Ran 1 test ... OK` não aprova a execução. `unittest.py`, `pytest.py` e outros nomes reservados na raiz são rejeitados. O interpretador inicia com `-I`; o framework é carregado antes de adicionar o projeto ao caminho de importação.
@@ -107,7 +109,31 @@ Estas medidas resistem aos desvios demonstrados no review. Não são uma prova d
 | `--max-llm-calls` | 80 chamadas, incluindo retries de JSON |
 | `--timeout` | 30 segundos por execução de testes |
 
-O timeout HTTP é de 90 segundos por chamada. O orçamento de contexto é de 48.000 caracteres. Limites não positivos são rejeitados.
+O timeout HTTP é de 90 segundos por chamada. A inferência usa temperatura zero para reduzir
+variação entre repetições experimentais. O orçamento de contexto é de 48.000 caracteres. Limites não positivos são rejeitados.
+Falhas transitórias de conexão e HTTP 408/429/5xx são tentadas novamente até cinco chamadas;
+cada tentativa consome o orçamento e entra em `AverageLLMCalls`. Arquivos Python com erro de
+sintaxe e escritas que não mudam o conteúdo são recusados antes da verificação, com feedback ao modelo.
+Antes de uma nova tentativa, o modelo deve registrar um diagnóstico estruturado com causa raiz,
+arquivos a mudar e comportamentos a preservar. As prévias mantêm separadamente o início e o fim
+dos logs do projeto e da aceitação independente; a saída integral continua disponível por páginas.
+Se a aceitação independente reprovar uma tarefa que alterou produção, os testes presentes são
+congelados enquanto a produção reprova. Se a aceitação aprovar a produção, ocorre o inverso: a
+produção alterada é congelada e testes novos permanecem editáveis para corrigir contradições com
+o contrato. Testes originais nunca são liberados. Em tarefas que alteram somente testes, os testes
+novos permanecem editáveis para permitir fortalecer casos que não detectaram mutações.
+
+Nas seis tarefas catalogadas, uma allowlist limita a escrita aos arquivos de produção declarados e
+ao novo teste obrigatório. Edições de Python também preservam funções, classes, assinaturas e imports
+existentes, e ciclos novos entre módulos locais são rejeitados antes de gravar. A avaliação por mutação mantém
+todos os ensaios no resultado auditável, mas informa ao repair loop separadamente a falha no original:
+falhar em um mutante é detecção correta, não um defeito da aplicação.
+
+O contexto inicial prioriza os arquivos nomeados no enunciado, depois `tests/conftest.py`, o código
+da aplicação e os demais testes. Cada tarefa catalogada acrescenta orientações operacionais derivadas
+do próprio contrato para destacar armadilhas que o modelo repetiu nas avaliações, sem alterar os testes
+de aceitação. No reparo, o modelo é solicitado a ligar a mudança proposta a uma restrição textual do
+enunciado; uma escrita sem efeito devolve também o conteúdo atual para evitar repetição cega.
 
 Cada execução salva em `<projeto>/.minicode/<id>/`:
 
@@ -117,6 +143,34 @@ Cada execução salva em `<projeto>/.minicode/<id>/`:
 - `tests-N.log`, com saída da verificação da tentativa.
 
 O runner conserva a saída até o orçamento de 1 MB; ultrapassá-lo reprova a execução. O feedback preserva início e final do log e indica truncamento. A ferramenta `read_test_output(offset)` permite paginar o restante, sem abrir acesso genérico à pasta de rastros. Erros de protocolo do cliente são convertidos em falhas e exceções inesperadas são registradas como `FAILED`. Interrupções encerram o grupo de processos e removem o container.
+
+Além de leitura, busca e escrita completa, `replace_text(path, old, new)` aplica uma substituição
+exata quando `old` ocorre uma única vez. O resultado passa pelas mesmas validações de caminho,
+proteção, tamanho e sintaxe da escrita completa. Para mudanças maiores e localizadas,
+`replace_python_function(path, name, content)` substitui a função alvo e pode inserir novas funções
+auxiliares de módulo no mesmo bloco, sem remover as demais APIs. Auxiliares duplicadas e mudanças
+entre função síncrona e assíncrona são recusadas. Se uma resposta produzir Python inválido apenas por
+usar `\\n` literal entre linhas, tanto essa ferramenta quanto a escrita completa normalizam os escapes
+somente quando o resultado completo passa na compilação.
+
+O repair loop inclui um `repair_scope` verificável. Produção aprovada e testes congelados aparecem
+com caminhos exatos; planos que tentam alterar o lado bloqueado são rejeitados antes das ferramentas.
+Erros de ferramenta repetem esse escopo e exigem mudança de ferramenta, caminho ou conteúdo.
+Ao iniciar um reparo, o histórico operacional anterior é descartado e substituído pelo resultado da
+verificação e por um snapshot dos arquivos atualmente editáveis. O evento `repair_context_reset`
+registra quais arquivos foram reapresentados ao modelo.
+
+As tarefas catalogadas também declaram arquivos obrigatórios, além da allowlist. `run_tests` é
+recusado até que todos tenham sido efetivamente alterados; isso impede que uma tarefa multiarquivo,
+como a validação de usuários, seja verificada sem atualizar o service e o controller.
+Assim que o último arquivo obrigatório é gravado, o harness inicia a verificação automaticamente,
+sem consumir outra chamada ao endpoint apenas para solicitar `run_tests`.
+
+Antes dessa execução, as tarefas catalogadas passam por uma pré-verificação contratual transparente.
+Ela não implementa a solução: apenas recusa padrões que contradizem literalmente o enunciado, como
+conversão silenciosa de query string, teste de tipo que aceita `bool`, helper aninhada quando foi pedida
+extração e casos de teste cuja própria normalização os torna válidos. As violações voltam ao modelo
+como feedback e não consomem uma iteração de testes.
 
 ## Avaliar a bateria completa
 

@@ -1,0 +1,21 @@
+{
+  "status": "completed_negative_result",
+  "date": "2026-11-22",
+  "commit": "a8fa17cda13cfdb287ba47c2bcf0aafb3873902a",
+  "dataset_version": "seed_v1_24_examples",
+  "dataset_sha256": "c904c1f3ddcc850534bc89d874b87e8b2f2e443cfa783f0dd4fd404efa0209e3",
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "accelerator": "Tesla T4",
+  "method": "QLoRA 4-bit NF4",
+  "epochs": 5,
+  "lora": {"r": 16, "alpha": 32, "dropout": 0.05},
+  "final_train_loss": 2.2577,
+  "final_validation_loss": 2.176619,
+  "source": "outputs preserved in notebooks/train_tool_selector_colab.ipynb before protocol v2",
+  "limitations": [
+    "baseline was not executed",
+    "the seed test had only four examples from one family",
+    "inference prompt did not use the same chat template as training",
+    "this result must not be compared directly with dataset v2"
+  ]
+}

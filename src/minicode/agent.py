@@ -78,6 +78,7 @@ class Agent:
         self.state = State.RECEIVED
         self.spec = self.plan = self.last_test = None
         self.iterations = self.llm_calls = 0
+        self.selector_calls = 0
         self.task = ""
         self.history = []
         self.last_raw_response = None
@@ -100,6 +101,7 @@ class Agent:
         if self.run_dir:
             state = {"task": self.task, "state": self.state.value,
                      "iterations": self.iterations, "llm_calls": self.llm_calls,
+                     "selector_calls": self.selector_calls,
                      "changed_files": sorted(self.workspace.changed), "last_test": self.last_test}
             temp = self.run_dir / "state.tmp"
             temp.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -459,6 +461,12 @@ class Agent:
                 for _ in range(self.max_actions):
                     selected_tool = None
                     if self.tool_selector:
+                        if self.llm_calls >= self.max_llm_calls:
+                            raise ModelError("Limite de chamadas LLM atingido")
+                        self.llm_calls += 1
+                        self.selector_calls += 1
+                        self.event("selector_call", number=self.selector_calls,
+                                   total_llm_calls=self.llm_calls)
                         decision = self.tool_selector.select(
                             state=self.state.value, task=self.task, specification=self.spec,
                             plan=self.plan, feedback=feedback)
@@ -578,4 +586,5 @@ class Agent:
                 self.transition(State.FAILED)
         self.save()
         return {"state": self.state.value, "iterations": self.iterations, "llm_calls": self.llm_calls,
+                "selector_calls": self.selector_calls,
                 "changed_files": sorted(self.workspace.changed), "trace": str(self.run_dir)}

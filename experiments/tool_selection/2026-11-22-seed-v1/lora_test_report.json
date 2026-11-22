@@ -1,0 +1,8 @@
+{
+  "split": "test",
+  "examples": 4,
+  "correct": 0,
+  "accuracy": 0.0,
+  "invalid_predictions": 4,
+  "note": "Resultado histórico do seed v1; preservado antes de substituir o protocolo e o dataset."
+}

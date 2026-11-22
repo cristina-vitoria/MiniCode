@@ -19,12 +19,14 @@ def metrics(rows):
             'TaskSuccessRate':sum(row['success'] for row in rows)/count if count else 0,
             'FirstAttemptSuccess':sum(row['success'] and row['iterations'] == 1 for row in rows)/count if count else 0,
             'AverageIterations':sum(row['iterations'] for row in rows)/count if count else 0,
-            'AverageLLMCalls':sum(row['llm_calls'] for row in rows)/count if count else 0}
+            'AverageLLMCalls':sum(row['llm_calls'] for row in rows)/count if count else 0,
+            'AverageSelectorCalls':sum(row.get('selector_calls',0) for row in rows)/count if count else 0}
 
 
 def evaluate(client_factory, output, mode='docker', max_iterations=3, max_actions=20,
              max_llm_calls=80, timeout=30, source='softwareteste', python=None,
-             image='minicode-tests:parte1', progress=None, tool_selector_factory=None):
+             image='minicode-tests:parte1', progress=None, tool_selector_factory=None,
+             tool_selector_context=True):
     if min(max_iterations,max_actions,max_llm_calls,timeout) < 1 or mode not in {'docker','local'}:
         raise ValueError('Modo ou limites inválidos')
     source = Path(source).resolve(strict=True)
@@ -38,7 +40,8 @@ def evaluate(client_factory, output, mode='docker', max_iterations=3, max_action
     config = {'mode':mode,'profile':'pytest','max_iterations':max_iterations,'max_actions':max_actions,
               'max_llm_calls':max_llm_calls,'timeout':timeout,'image':image,'python':python or platform.python_version(),
               'source_digest':Workspace(source).digest(),'started_at':datetime.now(timezone.utc).isoformat(),
-              'tool_selector': bool(tool_selector_factory)}
+              'tool_selector': bool(tool_selector_factory),
+              'tool_selector_context': bool(tool_selector_context) if tool_selector_factory else None}
     finished = False
 
     def save():
@@ -81,7 +84,8 @@ def evaluate(client_factory, output, mode='docker', max_iterations=3, max_action
                 row.update(state='FAILED',error=f'{type(exc).__name__}: {exc}',success=False)
             finally:
                 if agent:
-                    row.update(iterations=agent.iterations,llm_calls=agent.llm_calls)
+                    row.update(iterations=agent.iterations,llm_calls=agent.llm_calls,
+                               selector_calls=agent.selector_calls)
                 try:
                     if root.exists():
                         copy_filtered(root,output/task.id)

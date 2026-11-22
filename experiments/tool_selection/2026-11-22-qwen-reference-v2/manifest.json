@@ -1,0 +1,17 @@
+{
+  "status": "complete",
+  "role": "additional_reference_not_finetuning_baseline",
+  "model": "Qwen/Qwen2.5-14B-Instruct-AWQ",
+  "dataset_sha256": "42393f6ea6e93432c0a7dccca2b7f4700cced33b59a6732fb6065521c81bf3a1",
+  "protocol": "tool-name-v2",
+  "protocol_sha256": "fac5bc1399871d5097ce98d347b8329ed41b31abe9e35842a863b4463a5a8e95",
+  "started_at": "2026-11-22T22:05:36.035990+00:00",
+  "calls": 16,
+  "generation": {
+    "temperature": 0.0,
+    "max_tokens": 4096
+  },
+  "limitation": "API Qwen uses 4096 output tokens; small-model protocol caps at 16.",
+  "seconds": 98.52991752199887,
+  "ended_at": "2026-11-22T22:07:14.566085+00:00"
+}

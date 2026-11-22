@@ -21,6 +21,8 @@ def main(argv=None):
     parser.add_argument('--task-id',choices=[task.id for task in TASKS],help='Enunciado e aceitação independentes de softwareteste')
     parser.add_argument('--env-file',help='Arquivo de configuração do endpoint')
     parser.add_argument('--tool-selector-env-file', help='Configuração de endpoint local/Colab do seletor LoRA; mantém Qwen para as demais funções')
+    parser.add_argument('--tool-selector-without-context', action='store_true',
+                        help='Ablação: omitir specification e plan da entrada do seletor')
     parser.add_argument('--allow-local-tests',action='store_true',help='Executar Python confiável no host, sem sandbox')
     parser.add_argument('--test-profile',choices=['unittest','pytest'],default='unittest')
     parser.add_argument('--test-python',help='Interpretador preparado para os testes locais')
@@ -49,13 +51,18 @@ def main(argv=None):
             copy_filtered(args.source,args.project)
             print(instructions[args.prepare_task])
             return 0
+        if args.tool_selector_without_context and not args.tool_selector_env_file:
+            raise ValueError('--tool-selector-without-context exige --tool-selector-env-file')
         progress = lambda message: print('→ '+message,flush=True)
         if args.evaluate:
             result = evaluate(lambda:QwenClient(args.env_file),args.evaluate,mode,args.max_iterations,
                               args.max_actions,args.max_llm_calls,args.timeout,args.source,args.test_python,
                               args.test_image,progress,
-                              (lambda: OpenAICompatibleToolSelector(QwenClient(args.tool_selector_env_file)))
-                              if args.tool_selector_env_file else None)
+                              (lambda: OpenAICompatibleToolSelector(
+                                  QwenClient(args.tool_selector_env_file),
+                                  include_context=not args.tool_selector_without_context))
+                              if args.tool_selector_env_file else None,
+                              tool_selector_context=not args.tool_selector_without_context)
             print(json.dumps(result['metrics'],indent=2))
             return 0 if result['complete'] else 1
         acceptance = None
@@ -80,7 +87,10 @@ def main(argv=None):
             instruction = args.task or input('MiniCode > ')
             profile = args.test_profile
         runner = TestRunner(args.project,mode,args.timeout,profile,args.test_python,args.test_image,args.acceptance_tests)
-        selector = OpenAICompatibleToolSelector(QwenClient(args.tool_selector_env_file)) if args.tool_selector_env_file else None
+        selector = (OpenAICompatibleToolSelector(
+            QwenClient(args.tool_selector_env_file),
+            include_context=not args.tool_selector_without_context)
+            if args.tool_selector_env_file else None)
         agent = Agent(args.project,QwenClient(args.env_file),runner,max_iterations=args.max_iterations,
                       max_actions=args.max_actions,max_llm_calls=args.max_llm_calls,progress=progress,
                       acceptance=acceptance,editable_paths=editable_paths,required_paths=required_paths,

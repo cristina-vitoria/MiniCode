@@ -5,7 +5,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from .tool_selector import TOOLS
+from .selector_protocol import TOOL_SET as TOOLS
 
 REQUIRED_INPUT = {"state", "task", "specification", "plan", "feedback"}
 SPLITS = {"train", "validation", "test"}
@@ -26,6 +26,10 @@ def load_examples(path: str | Path) -> list[dict]:
             raise ValueError(f"split ou rótulo inválido na linha {line_no}")
         if not isinstance(row.get("input"), dict) or REQUIRED_INPUT - set(row["input"]):
             raise ValueError(f"entrada incompleta na linha {line_no}")
+        if row["input"].get("state") != "IMPLEMENTING":
+            raise ValueError(f"estado fora da interface de produção na linha {line_no}")
+        if not isinstance(row.get("provenance"), str) or not row["provenance"].strip():
+            raise ValueError(f"proveniência ausente na linha {line_no}")
         rows.append(row)
     if not rows:
         raise ValueError("Dataset vazio")

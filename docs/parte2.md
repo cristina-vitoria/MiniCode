@@ -8,7 +8,7 @@ Escolhemos `tool selection` porque a Parte 1 já separa LLM e ferramentas e pres
 
 ## Dados e prevenção de vazamento
 
-`data/tool_selection/examples.jsonl` é um seed dataset curado a partir dos contratos das seis tarefas públicas da Parte 1. Cada exemplo contém estado, tarefa, spec, plano, feedback limitado e rótulo da próxima ferramenta — nunca argumentos executáveis ou segredos. São 24 exemplos: 16 treino (`discount`, `tax`, `tests`, `users`), 4 validação (`refactor`) e 4 teste (`pagination`). A unidade de split é `task_family`, portanto uma família não pode aparecer em dois splits. O validador falha em IDs duplicados, esquema incompleto, rótulos fora da allowlist, split vazio ou vazamento de família.
+`data/tool_selection/examples.jsonl` é o dataset curado v2. Cada exemplo contém estado, tarefa, spec, plano, feedback limitado e rótulo da próxima ferramenta — nunca argumentos executáveis ou segredos. São 96 exemplos em 12 famílias: 64 de treino, 16 de validação e 16 de teste. A unidade de split é `task_family`, portanto uma família não pode aparecer em dois splits. As famílias finais `retry_timeout` e `audit_logging` não correspondem às seis tarefas públicas da Parte 1. Origem, limitações e SHA-256 estão registrados em `data/tool_selection/DATASET_CARD.md`.
 
 Regenerar o seed (apenas se revisar a curadoria):
 
@@ -17,11 +17,11 @@ python3 scripts/build_tool_selection_dataset.py
 python3 scripts/validate_tool_selection_dataset.py data/tool_selection/examples.jsonl
 ```
 
-Antes do treinamento real, ampliar os dados com exemplos adicionais, registrar a origem/revisor de cada um e congelar `test` antes de ajustar hiperparâmetros. Não usar o endpoint do professor como teacher sem registrar prompt, versão, filtragem humana e licença; esse repositório não contém chamadas nem credenciais de teacher.
+O teste v2 está congelado: não deve orientar prompts, hiperparâmetros ou nova curadoria. Se isso ocorrer, será necessário criar uma nova versão com outras famílias. Não usar o endpoint do professor como teacher sem registrar prompt, versão, filtragem humana e licença; este dataset não contém chamadas nem credenciais de teacher.
 
 ## Treinamento e avaliação
 
-O notebook [train_tool_selector_colab.ipynb](../notebooks/train_tool_selector_colab.ipynb) usa `Qwen/Qwen2.5-0.5B-Instruct` com QLoRA quando a GPU permite `bitsandbytes` e cai para LoRA fp16/bf16 quando não permite. LoRA mantém o peso base congelado e aprende \(W'=W+BA\), em que `A` e `B` têm posto `r` pequeno; assim há muito menos parâmetros treináveis que em fine-tuning completo. O notebook valida o dataset, tokeniza, treina, registra losses de treino/validação, plota as curvas e exporta predições separadas para o teste.
+O notebook [train_tool_selector_colab.ipynb](../notebooks/train_tool_selector_colab.ipynb) usa `Qwen/Qwen2.5-0.5B-Instruct` com QLoRA 4-bit. LoRA mantém o peso base congelado e aprende \(W'=W+BA\), em que `A` e `B` têm posto `r` pequeno; assim há muito menos parâmetros treináveis que em fine-tuning completo. O notebook usa o protocolo canônico de `selector_protocol.py`, fixa seeds, valida o dataset, treina, registra losses, salva a curva e exporta três condições na mesma execução: base, LoRA e LoRA sem spec+plano.
 
 A comparação obrigatória é **o mesmo checkpoint** base versus base+adapter, com mesmo prompt e split test. Para pontuar uma execução já exportada:
 
@@ -30,18 +30,83 @@ python3 scripts/evaluate_tool_selection.py --predictions artifacts/base_test_pre
 python3 scripts/evaluate_tool_selection.py --predictions artifacts/lora_test_predictions.jsonl --output artifacts/lora_test_report.json
 ```
 
-Os artefatos `artifacts/` são ignorados; nenhuma métrica foi preenchida ou inferida neste repositório. O endpoint Qwen-14B é referência opcional, avaliada com o mesmo protocolo e anotada como referência, não como baseline do fine-tuning.
+O primeiro treinamento real, feito no seed v1 em Tesla T4, foi preservado em `experiments/tool_selection/2026-11-22-seed-v1/`: loss de validação final 2,176619, mas acurácia LoRA 0/4 e quatro saídas inválidas. Ele não possui baseline e usou um protocolo antigo; portanto é evidência histórica negativa, não o resultado final. O endpoint Qwen-14B é referência opcional, anotada como referência e não como baseline do fine-tuning.
 
 ## Integração segura e end-to-end
 
-Após servir o adapter no Colab (ou localmente) atrás de endpoint Chat Completions, crie um arquivo de ambiente separado com `MINICODE_BASE_URL`, `MINICODE_MODEL` e `MINICODE_API_KEY`; não o versione. Então passe `--tool-selector-env-file caminho.env` ao MiniCode. O Qwen principal continua gerando os argumentos; o seletor retorna somente um nome de ferramenta pertencente a uma allowlist. `Agent.call_tool`, a máquina de estados, paths protegidos, acceptance e gates de `DONE` continuam sendo a autoridade. Resposta inválida, ferramenta fora da allowlist ou divergência são recusadas e auditadas.
+Após servir o adapter no Colab (ou localmente) atrás de endpoint Chat Completions, crie um arquivo de ambiente separado com `MINICODE_BASE_URL`, `MINICODE_MODEL` e `MINICODE_API_KEY`; não o versione. Então passe `--tool-selector-env-file caminho.env` ao MiniCode. O prompt e o parser de produção são os mesmos usados pelo notebook: a única saída aceita é o nome exato de uma ferramenta da allowlist. O Qwen principal continua gerando argumentos; `Agent.call_tool`, máquina de estados, paths protegidos, aceitação e gates de `DONE` continuam sendo a autoridade.
 
-Avalie end-to-end numa cópia nova por tarefa e reporte TaskSuccessRate, FirstAttemptSuccess, AverageIterations e AverageLLMCalls para: (1) Qwen sem seletor e (2) Qwen com selector LoRA. Fixe a mesma suíte/commit, limites, temperatura e endpoint. Ainda falta executar isso em infraestrutura disponível.
+Avalie end-to-end numa cópia nova por tarefa e reporte TaskSuccessRate, FirstAttemptSuccess, AverageIterations e AverageLLMCalls para: (1) Qwen sem seletor, (2) Qwen com seletor LoRA e (3) ablação LoRA sem spec+plano. A terceira condição usa `--tool-selector-without-context` junto de `--tool-selector-env-file`. Fixe a mesma suíte/commit, limites, temperatura e endpoint. Ainda falta executar isso em infraestrutura disponível.
 
 ## Ablação
 
-Ablação definida: seletor recebe **com spec+plano** versus **sem spec+plano**, mantendo modelo, split, prompt e orçamento. Avaliar primeiro acurácia local e depois TaskSuccessRate end-to-end. Isso testa se o contexto estruturado contribui; não remover os hard gates, pois isso mudaria o modelo de ameaça e não é uma ablação segura.
+Ablação definida: LoRA **com spec+plano** versus o mesmo LoRA **sem spec+plano**, mantendo modelo, split, decodificação e orçamento. O notebook produz ambas as predições locais. Depois, as duas condições devem ser repetidas end-to-end. Não remover os hard gates, pois isso mudaria o modelo de ameaça e não seria uma ablação segura.
 
 ## Estado atual
 
-Implementados e verificados localmente: esquema/validador de dataset, detector de vazamento, protocolo de score, integração estreita e testes de segurança. Pendente: executar notebook no Colab com GPU, exportar adapter/predições, servir endpoint, rodar base/LoRA/Qwen-14B e preencher tabela de resultados reais.
+Implementados: dataset v2 e card, detector de vazamento, protocolo único treino/produção, score independente do diretório atual, notebook base×LoRA×ablação, carregamento direto de adapter, executor end-to-end e testes de segurança. O novo notebook contém alvos supervisionados, loss somente na resposta e verificação das máscaras antes de treinar. O treinamento anterior da versão v2 construía somente prompts; essa falha foi corrigida antes de uma execução científica v2.
+
+Executados em 22/11/2026: smoke test SFT/LoRA com modelo minúsculo aleatório e referência Qwen-14B no teste v2. A referência teve 2/16 acertos (12,5%) e zero respostas inválidas. Consulte `RESULTADOS_PARTE2.md`. Treinamento real v2, comparação base×LoRA, ablação quantitativa e baterias end-to-end continuam pendentes de GPU/adapter. A máquina local não dispõe de CUDA e o Colab não estava acessível nesta sessão.
+
+## Procedimento de conclusão
+
+1. Execute a partir da raiz `python3 scripts/build_colab_bundle.py`. O ZIP contém código, notebook,
+   dataset e manifesto de arquivos, sem .env nem pesos. Extraia `MiniCode-parte2` em
+   `/content/drive/MyDrive/redesneurais/` e confira que o notebook importado é o do pacote novo.
+2. Abra `notebooks/train_tool_selector_colab.ipynb` em uma sessão Colab limpa com GPU e execute
+   todas as células. Dependências são instaladas com erro verificável; cada execução usa uma pasta
+   nova, preservando as anteriores. Registre essa execução sem alterar o protocolo depois do teste.
+3. O notebook resolve e fixa a revisão do modelo, registra hashes, ambiente, seed, losses,
+   parâmetros treináveis, predições base/LoRA/ablação, relatórios e adapter. Ele usa `trainer.model`
+   para garantir que a inferência recebe o PeftModel treinado. `small_results.zip` leva as métricas;
+   a pasta `adapter` deve ser exportada separadamente com seus checksums.
+4. Copie a pasta completa da execução escolhida para
+   `/home/vitoria/Documentos/redesneurais/MiniCode/artifacts/colab-v2`. Ela deve conter
+   `run_manifest.json`, `dataset.jsonl`, os relatórios/predições e `adapter/`.
+5. Na raiz local, prepare o ambiente e execute as condições com Docker disponível:
+
+```bash
+cd /home/vitoria/Documentos/redesneurais/MiniCode
+python3 -m venv .venv-ml
+.venv-ml/bin/python -m pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+.venv-ml/bin/python -m pip install -r requirements-ml.txt
+.venv-ml/bin/python scripts/run_part2_experiments.py --run-dir /home/vitoria/Documentos/redesneurais/MiniCode/artifacts/colab-v2 --output /home/vitoria/Documentos/redesneurais/MiniCode/experiments/results/parte2-v2-e2e --device cpu
+```
+
+O carregador direto usa o mesmo template/parser do notebook e elimina a necessidade de túnel
+público para o Colab. Em CPU ele recarrega o checkpoint base em float32 e aplica o adapter;
+essa diferença em relação à inferência local 4-bit é registrada no manifesto. As duas condições
+end-to-end com seletor usam a mesma precisão. Em máquina CUDA, `--device cuda --quantized` conserva
+NF4. Não compare runs com precisões diferentes como se fossem a mesma configuração.
+
+O executor verifica hashes do adapter, dataset e protocolo, fixa imagem Docker por ID no manifesto,
+recusa destino existente e detecta alterações de código entre condições. `AverageLLMCalls` e o limite
+global incluem chamadas ao Qwen e ao seletor; `AverageSelectorCalls` informa a parcela especializada.
+Uma saída inválida do seletor causa falha auditada, sem fallback oculto.
+
+6. Gere as tabelas a partir de arquivos verificados:
+
+```bash
+cd /home/vitoria/Documentos/redesneurais/MiniCode
+.venv/bin/python scripts/summarize_part2_results.py --run-dir /home/vitoria/Documentos/redesneurais/MiniCode/artifacts/colab-v2 --end-to-end /home/vitoria/Documentos/redesneurais/MiniCode/experiments/results/parte2-v2-e2e --output /home/vitoria/Documentos/redesneurais/MiniCode/docs/RESULTADOS_EXECUCAO_V2.md
+```
+
+7. Revise as oito respostas em `RESULTADOS_PARTE2.md`, documente falhas operacionais e grave a
+   demonstração seguindo `ROTEIRO_VIDEO_PARTE2.md`. Uma única repetição em seis tarefas tem alta
+   incerteza; apresente essa limitação e preserve todas as tentativas, inclusive negativas.
+
+## Verificação de engenharia
+
+```bash
+cd /home/vitoria/Documentos/redesneurais/MiniCode
+.venv/bin/python -m unittest discover -s tests -v
+MINICODE_DOCKER_TESTS=1 .venv/bin/python -m unittest discover -s tests -p test_docker.py -v
+.venv-ml/bin/python scripts/smoke_selector_training.py
+```
+
+O smoke test usa somente quatro exemplos de treino e um modelo aleatório criado localmente;
+não acessa teste, não baixa um checkpoint e não mede desempenho científico. Ele valida a perda
+supervisionada, três caminhos de inferência, salvamento, recarga e cliente do seletor.
+
+Referências de API verificadas: [TRL 0.26.2](https://huggingface.co/docs/trl/v0.26.2/en/sft_trainer)
+e [PEFT 0.18](https://huggingface.co/docs/peft/v0.18.0/en/developer_guides/quantization).

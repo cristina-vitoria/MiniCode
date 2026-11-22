@@ -2,7 +2,7 @@
 
 Agente de programação em Python, com cliente para Qwen via endpoint compatível com Chat Completions. A LLM produz especificação, plano e propostas de ferramentas; o harness controla os estados, executa a verificação e decide o resultado.
 
-Para a Parte 2, há uma especialização opcional e isolada para escolha da próxima ferramenta. Consulte [docs/parte2.md](docs/parte2.md): ela traz hipótese, dados, prevenção de vazamento, notebook Colab, protocolo de comparação e pendências experimentais. O seletor não substitui os hard gates nem recebe acesso a shell ou escrita.
+Para a Parte 2, há uma especialização opcional e isolada para escolha da próxima ferramenta. Consulte [docs/parte2.md](docs/parte2.md): ela traz hipótese, dataset v2, prevenção de vazamento, notebook Colab, protocolo base×LoRA, ablação e estado experimental. O seletor não substitui os hard gates nem recebe acesso a shell ou escrita.
 
 ## Instalar
 
@@ -187,7 +187,8 @@ O destino deve ser novo. Cada tarefa recebe uma cópia isolada da mesma versão 
 | TaskSuccessRate | Tarefas corretas / todas as tarefas planejadas |
 | FirstAttemptSuccess | Tarefas corretas com uma tentativa / todas as tarefas planejadas |
 | AverageIterations | Soma das tentativas / todas as tarefas planejadas |
-| AverageLLMCalls | Soma das chamadas / todas as tarefas planejadas |
+| AverageLLMCalls | Soma das chamadas dos modelos principal e seletor / todas as tarefas planejadas |
+| AverageSelectorCalls | Soma das chamadas do seletor / todas as tarefas planejadas |
 
 As seis tarefas entram no denominador desde o primeiro checkpoint. Falha de inicialização de uma tarefa não exclui a tarefa nem impede as seguintes. Interrupções deixam `complete: false`. Um código de saída zero de `--evaluate` significa que a bateria terminou e foi registrada; consulte TaskSuccessRate para saber quantas tarefas foram resolvidas. O modo de tarefa individual retorna zero apenas com `DONE`.
 

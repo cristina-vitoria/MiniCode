@@ -10,3 +10,9 @@ build/
 dist/
 experiments/results/
 laboratorio_tarefas/
+avaliacoes_historico/parte1/discount
+avaliacoes_historico/parte1/pagination
+avaliacoes_historico/parte1/refactor
+avaliacoes_historico/parte1/tax
+avaliacoes_historico/parte1/tests
+avaliacoes_historico/parte1/users

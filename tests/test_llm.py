@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 import urllib.error
 
-from minicode.llm import QwenClient, ModelError
+from minicode.llm import QwenClient, ModelError, TransientModelError
 
 
 class ClientTests(unittest.TestCase):
@@ -62,7 +62,9 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(json.loads(QwenClient().complete([]))["tool"], "run_tests")
         request = opener.open.call_args.args[0]
         self.assertEqual(request.full_url, "https://example.org/v1/chat/completions")
-        self.assertEqual(json.loads(request.data)["model"], "qwen")
+        payload = json.loads(request.data)
+        self.assertEqual(payload["model"], "qwen")
+        self.assertEqual(payload["temperature"], 0.0)
         self.assertEqual(request.headers["Authorization"], "Bearer test-only")
 
     def test_http_error_does_not_leak_body(self):
@@ -73,6 +75,24 @@ class ClientTests(unittest.TestCase):
             with self.assertRaisesRegex(ModelError, "HTTP 401") as caught:
                 QwenClient().complete([])
         self.assertNotIn("secret", str(caught.exception))
+
+    def test_classifies_transient_transport_failure(self):
+        env = {"MINICODE_BASE_URL": "https://example.org/v1", "MINICODE_MODEL": "qwen"}
+        opener = MagicMock()
+        opener.open.side_effect = urllib.error.URLError("temporary")
+        with patch.dict(os.environ, env, clear=True), patch("urllib.request.build_opener", return_value=opener):
+            with self.assertRaises(TransientModelError):
+                QwenClient().complete([])
+        self.assertEqual(opener.open.call_count, 1)
+
+    def test_does_not_retry_permanent_http_error(self):
+        env = {"MINICODE_BASE_URL": "https://example.org/v1", "MINICODE_MODEL": "qwen"}
+        opener = MagicMock()
+        opener.open.side_effect = urllib.error.HTTPError("https://example.org", 401, "secret", {}, None)
+        with patch.dict(os.environ, env, clear=True), patch("urllib.request.build_opener", return_value=opener):
+            with self.assertRaisesRegex(ModelError, "HTTP 401"):
+                QwenClient().complete([])
+        self.assertEqual(opener.open.call_count, 1)
 
     def test_malformed_endpoint_responses_are_model_errors(self):
         env = {'MINICODE_BASE_URL':'https://example.org/v1','MINICODE_MODEL':'qwen'}

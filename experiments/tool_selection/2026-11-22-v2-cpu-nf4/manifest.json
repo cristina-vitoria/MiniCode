@@ -1,0 +1,24 @@
+{
+  "status": "incomplete",
+  "interruption_reason": "Manual SIGINT after first prediction: CPU NF4 inference too slow for this local verification. Not a reproduction of Colab metrics.",
+  "role": "CPU deployment check; separate from Colab GPU experiment",
+  "started_at": "2026-11-22T22:50:50.597536+00:00",
+  "training_manifest_sha256": "951f5f3b2c3d1ac0811f9c2b9a98a79382587a65b560b2c63f768113903a7988",
+  "selector": {
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+    "device": "cpu",
+    "quantized": true,
+    "dtype": "torch.float16",
+    "adapter": "artifacts/colab-v2/adapter",
+    "adapter_sha256": "cde6667ed3369008396d26ca19cf9b85295045ffb9a1151afdb3dd851999dcdc"
+  },
+  "versions": {
+    "torch": "2.5.1+cpu",
+    "transformers": "4.57.3",
+    "peft": "0.18.0",
+    "trl": "0.26.2",
+    "bitsandbytes": "0.48.2"
+  },
+  "conditions": {}
+}

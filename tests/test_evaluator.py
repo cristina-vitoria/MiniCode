@@ -6,7 +6,7 @@ import unittest
 import sys
 
 from minicode.evaluator import evaluate, metrics
-from minicode.tasks import TASKS, TaskAcceptance
+from minicode.tasks import TASKS, TaskAcceptance, contract_issues, prompts
 from minicode.llm import ModelError
 from minicode.workspace import copy_filtered
 
@@ -87,6 +87,41 @@ class EvaluationTests(unittest.TestCase):
 
     def test_six_categories(self):
         self.assertEqual(len({task.kind for task in TASKS}),6)
+
+    def test_catalog_prompts_include_contract_guidance(self):
+        instructions = prompts(SOURCE)
+        self.assertEqual(set(instructions), {task.id for task in TASKS})
+        for task in TASKS:
+            self.assertIn('Orientações operacionais derivadas do contrato', instructions[task.id])
+            for item in task.guidance:
+                self.assertIn(item, instructions[task.id])
+
+    def test_contract_preflight_rejects_recurrent_evaluation_patterns(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'project'
+            copy_filtered(SOURCE, root)
+            (root / 'tests/test_pagination.py').write_text('def test_placeholder(): pass\n')
+            (root / 'app/controllers.py').write_text(
+                (SOURCE / 'app/controllers.py').read_text().replace(
+                    '    # TASK 03: os parâmetros de paginação ainda não são tratados.\n'
+                    '    products = current_app.extensions["store"].list_products()\n',
+                    "    page = request.args.get('page', default=1, type=int)\n"
+                    '    products = current_app.extensions["store"].list_products()\n'))
+            pagination = contract_issues('pagination', root)
+            self.assertTrue(any('type=int' in issue for issue in pagination))
+
+            (root / 'tests/test_services.py').write_text(
+                'import unittest\nfrom app.services import normalize_coupon\n'
+                'class T(unittest.TestCase):\n'
+                '    def test_coupon(self):\n'
+                '        with self.assertRaises(ValueError):\n'
+                "            normalize_coupon(' 123 ')\n")
+            services = contract_issues('tests', root)
+            self.assertTrue(any('cupom válido' in issue for issue in services))
+
+            (root / 'tests/test_report_refactor.py').write_text('def test_placeholder(): pass\n')
+            report = contract_issues('refactor', root)
+            self.assertTrue(any('função auxiliar de módulo' in issue for issue in report))
 
     def test_all_correct_solutions_pass_independent_acceptance(self):
         tasks=iter(TASKS)

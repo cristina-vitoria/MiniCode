@@ -1,0 +1,13 @@
+{
+  "kind": "engineering_smoke_not_model_evaluation",
+  "passed": true,
+  "supervision": {
+    "checked": 4,
+    "completion_only": true
+  },
+  "steps": 2,
+  "loss": 2.7066197395324707,
+  "conditions_generated": 3,
+  "adapter_reload_identical": true,
+  "local_selector_client_identical": true
+}

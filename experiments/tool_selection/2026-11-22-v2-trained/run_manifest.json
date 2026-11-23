@@ -1,0 +1,142 @@
+{
+  "status": "local_evaluation_complete",
+  "protocol": "tool-name-v2",
+  "config": {
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "seed": 42,
+    "epochs": 5,
+    "learning_rate": 0.0002,
+    "batch_size": 1,
+    "gradient_accumulation_steps": 8,
+    "max_length": 1024,
+    "r": 16,
+    "alpha": 32,
+    "dropout": 0.05,
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj"
+    ]
+  },
+  "dataset_sha256": "42393f6ea6e93432c0a7dccca2b7f4700cced33b59a6732fb6065521c81bf3a1",
+  "dataset": {
+    "examples": 96,
+    "families": 12,
+    "by_split": {
+      "test": 16,
+      "train": 64,
+      "validation": 16
+    },
+    "families_by_split": {
+      "test": [
+        "audit_logging",
+        "retry_timeout"
+      ],
+      "train": [
+        "config_search",
+        "factorial",
+        "health_route",
+        "pagination",
+        "report_refactor",
+        "service_tests",
+        "tax_rounding",
+        "user_validation"
+      ],
+      "validation": [
+        "cache_invalidation",
+        "csv_export"
+      ]
+    }
+  },
+  "code_sha256": {
+    "src/minicode/__init__.py": "4bf2bb05d1c3bc9d5c40a1a974489c5f4aa3f65391418f2fc3ac334ac7b672a9",
+    "src/minicode/__main__.py": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d",
+    "src/minicode/_test_worker.py": "fbbad0154e283b9b6b9000a30bfcb07abb0b5e84be4b95f65a8f8dbd5011b3ad",
+    "src/minicode/agent.py": "a2deaad8e320b95e013890072e2bb992bcf04b5497700724afc29308fd562c06",
+    "src/minicode/cli.py": "7f58518e0c32e7736a405db1c25606785f8b418257f3d0c1f55a78e6434d477c",
+    "src/minicode/config.py": "8f9f48323b01c0a6cefad062e9ff2aec4306bf688396a5975aa091b816fd8d55",
+    "src/minicode/contracts.py": "2f0bffbc7fc9f038f1260cbc6ad11f264e7f85fcb2dcb9b4857e28f44999a716",
+    "src/minicode/evaluator.py": "25fe76c88dbb6b41611651b6d98de722a0c97c57d4f3d7e35a7851a79568bd71",
+    "src/minicode/llm.py": "3ff31fc316bd20bed5c182eed1c6da1dd517f221fc1463fb952b5259de921a19",
+    "src/minicode/local_selector.py": "235d5e7fbfefce127ce620a224c84b7c56eefdea6a5aa3e87dea897a54176e32",
+    "src/minicode/selector_protocol.py": "fac5bc1399871d5097ce98d347b8329ed41b31abe9e35842a863b4463a5a8e95",
+    "src/minicode/selector_training.py": "43ec0f1155d9c7b675e8445616a47b6f07547b15c15eab97ca3548e5bbde3e66",
+    "src/minicode/specialization_data.py": "600bd2f4c4ebb333f1700276167564cc485c104950173e105c2be6af32854e6d",
+    "src/minicode/tasks.py": "f060df1f07733ee77399f61bf7b7584e600f2779f4b4066ee2564e5a064dd921",
+    "src/minicode/tool_selector.py": "6ca053b9a8ac18544a653e5a88e09b585011015744a01d673e6c88ecf0d04725",
+    "src/minicode/tools.py": "e28ddb94739412bc2f3296b68fee82117a3f3ad4d4c433a2aff486cff910f28e",
+    "src/minicode/workspace.py": "d02d04eeca6fcf93d94f8b216ecb5f891e882ab3c2af16f50295b91e52ab190b"
+  },
+  "python": "3.13.16",
+  "started_at": "2026-11-22T22:27:05.993034+00:00",
+  "model_revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+  "gpu": "Tesla T4",
+  "dtype": "torch.float16",
+  "torch": "2.11.0+cu130",
+  "quantization": {
+    "quant_method": "bitsandbytes",
+    "_load_in_8bit": false,
+    "_load_in_4bit": true,
+    "llm_int8_threshold": 6.0,
+    "llm_int8_skip_modules": null,
+    "llm_int8_enable_fp32_cpu_offload": false,
+    "llm_int8_has_fp16_weight": false,
+    "bnb_4bit_quant_type": "nf4",
+    "bnb_4bit_use_double_quant": true,
+    "bnb_4bit_compute_dtype": "float16",
+    "bnb_4bit_quant_storage": "uint8",
+    "load_in_4bit": true,
+    "load_in_8bit": false
+  },
+  "precision": {
+    "bf16": false,
+    "fp16": true,
+    "accelerate": "fp16",
+    "trainable_dtypes": [
+      "torch.float32"
+    ]
+  },
+  "supervision": {
+    "checked": 64,
+    "completion_only": true
+  },
+  "trainable_parameters": 2162688,
+  "total_parameters": 496195456,
+  "trainable_fraction": 0.004358540518355734,
+  "training_metrics": {
+    "train_runtime": 147.4477,
+    "train_samples_per_second": 2.17,
+    "train_steps_per_second": 0.271,
+    "total_flos": 202631416416000.0,
+    "train_loss": 0.5779604602605104,
+    "epoch": 5.0
+  },
+  "ended_at": "2026-11-22T22:29:54.743333+00:00",
+  "adapter_files": {
+    "README.md": "d19f76abeeafb9cdf40967064cac8e34037d5e392c3a3c5d1bdabcb983d28424",
+    "adapter_config.json": "d9a613ca45281f6e91208e9b584b0628396928e3420083b2142ed5fcaa7ad232",
+    "adapter_model.safetensors": "cde6667ed3369008396d26ca19cf9b85295045ffb9a1151afdb3dd851999dcdc",
+    "added_tokens.json": "58b54bbe36fc752f79a24a271ef66a0a0830054b4dfad94bde757d851968060b",
+    "chat_template.jinja": "cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+    "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+    "special_tokens_map.json": "a36726f7fe394c1324021cac4a9ee3ad6c4f6285c0d98721f9b0b95888ec9905",
+    "tokenizer.json": "9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa",
+    "tokenizer_config.json": "0cd576157a061a0616665d86ca9360cb10a3b41cadc70b8e254fb1fec1e649e4",
+    "training_args.bin": "df76955ea3b6ae9127ccd60e1607de7c3ff10142e9ea200a12b1a67d73ef2e94",
+    "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+  },
+  "artifact_sha256": {
+    "base_test_predictions.jsonl": "35445a715137870e4e84cc8a27aeb8fb562a268abe6b12cd5e2a1bb9c706f059",
+    "base_test_report.json": "fb3e0c6da35d2a637e6e1f29a72967f6f65249817c49c79fab48fff27e1a7268",
+    "comparison.json": "be8e11b070a2db15702210df3bfcdf1670ed495350d1391ce8f841adf300dfa1",
+    "dataset.jsonl": "42393f6ea6e93432c0a7dccca2b7f4700cced33b59a6732fb6065521c81bf3a1",
+    "environment.txt": "e65b1bebb18ffe441e0da8f526d775c974a4dc847dcc1daf6b3f787323d29108",
+    "lora_no_context_test_predictions.jsonl": "40824aee925f3c86e53c2b2189b41d89fad27d5c999b7a34f630dd44dc002727",
+    "lora_no_context_test_report.json": "e2deaf32b833fa60767b4fb523e7d4552ea13204abcafaa0f280296429b39ef4",
+    "lora_test_predictions.jsonl": "c1deb7d6d8f963042862c2c0ce892dd870e934b9dcda5ad3230f0a67a95fd446",
+    "lora_test_report.json": "9b6bed7f45ecd9ec0c89266f73e3a7135cd6b7eb61656b918740551253224bd1",
+    "loss.png": "7598e48e5538b45961cec0682f0cb99f7f1c6856fa3e6668a4ec8c1ebb8945ec",
+    "loss_history.json": "0b09b6f15f832c8aa474bc86a759f078466d376fc03fa8e441854cd4bcba63e7"
+  }
+}

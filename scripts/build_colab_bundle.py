@@ -16,7 +16,8 @@ def main():
     files = [ROOT/'README.md',ROOT/'AI_USAGE.md',ROOT/'pyproject.toml',ROOT/'requirements-ml.txt']
     for directory, patterns in {'src':['*.py','*.ini'], 'scripts':['*.py'],
             'tests':['*.py'], 'notebooks':['*.ipynb'], 'docs':['*.md'],
-            'data':['*.jsonl','*.md'], 'experiments/tool_selection':['*.json','*.jsonl','*.md'],
+            'data':['*.jsonl','*.md'], 'experiments/tool_selection':['*.json','*.jsonl','*.md','loss.png','environment.txt'],
+            'experiments/end_to_end':['*.json','*.md'],
             'softwareteste':['*.py','*.md','*.ini','*.txt','*.lock'],
             'sandbox':['Dockerfile','*.lock']}.items():
         for pattern in patterns:

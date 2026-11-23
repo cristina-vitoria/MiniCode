@@ -12,7 +12,12 @@ O experimento final deve ser produzido pelo notebook com o dataset v2 e deve con
 - adapter, estado do trainer e curvas de loss fora do GitHub, acompanhados de checksum;
 - bateria end-to-end sem seletor e com seletor LoRA, no mesmo commit e configuração.
 
-Nenhuma tabela final deve ser preenchida sem esses artefatos.
+`2026-11-22-v2-trained/` contém o treinamento real entregue pelo usuário, com manifesto,
+losses, curva e predições verificadas: base 0/16, LoRA 12/16, ablação 13/16 em T4/NF4.
+`2026-11-22-v2-cpu/` contém a avaliação independente da recarga em CPU/float32:
+base 0/16, LoRA 8/16 e ablação 9/16. Não misturar essas condições numéricas.
+O export completo com adapter foi importado para `artifacts/colab-v2/`, fora do Git.
+A bateria end-to-end continua incompleta; nenhum checkpoint parcial é uma taxa final.
 
 `2026-11-22-qwen-reference-v2/` contém a referência real Qwen-14B: 2/16 acertos e zero respostas
 inválidas. O manifesto registra modelo, protocolo, dataset, limite de geração e chamadas.

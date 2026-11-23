@@ -46,9 +46,15 @@ Ablação definida: LoRA **com spec+plano** versus o mesmo LoRA **sem spec+plano
 
 Implementados: dataset v2 e card, detector de vazamento, protocolo único treino/produção, score independente do diretório atual, notebook base×LoRA×ablação, carregamento direto de adapter, executor end-to-end e testes de segurança. O novo notebook contém alvos supervisionados, loss somente na resposta e verificação das máscaras antes de treinar. O treinamento anterior da versão v2 construía somente prompts; essa falha foi corrigida antes de uma execução científica v2.
 
-Executados em 22/11/2026: smoke test SFT/LoRA com modelo minúsculo aleatório e referência Qwen-14B no teste v2. A referência teve 2/16 acertos (12,5%) e zero respostas inválidas. Consulte `RESULTADOS_PARTE2.md`. Treinamento real v2, comparação base×LoRA, ablação quantitativa e baterias end-to-end continuam pendentes de GPU/adapter. A máquina local não dispõe de CUDA e o Colab não estava acessível nesta sessão.
+Executados em 22/11/2026: treinamento real v2 em Tesla T4, 40 passos/5 épocas, e avaliação base×LoRA×ablação. O ZIP entregue teve hashes conferidos: base 0/16, LoRA 12/16 (75%), sem spec/plano 13/16 (81,25%). Consulte `RESULTADOS_LOCAIS_V2.md` e `experiments/tool_selection/2026-11-22-v2-trained/`. O adapter está em `artifacts/colab-v2/adapter/`; não é necessário repetir o treino para retomar a integração.
+
+A recarga local em CPU/float32 produziu 0/16, 8/16 e 9/16, respectivamente: é outra condição numérica e não reproduz os valores da T4/NF4. Os resultados brutos estão em `experiments/tool_selection/2026-11-22-v2-cpu/`. A comparação end-to-end permanece incompleta por timeouts da rota de geração Qwen, apesar de DNS/TCP/TLS responderem. Não há conclusão sobre ganho no agente. O smoke com modelo aleatório e a referência Qwen-14B (2/16) são evidências separadas.
 
 ## Procedimento de conclusão
+
+As etapas 1–4 abaixo já foram cumpridas na execução entregue. Não retreinar para
+retomar. Após a API responder, usar a etapa 5 com o ambiente existente e a nova
+pasta `parte2-v2-e2e-02`; a pasta sem sufixo preserva a tentativa interrompida.
 
 1. Execute a partir da raiz `python3 scripts/build_colab_bundle.py`. O ZIP contém código, notebook,
    dataset e manifesto de arquivos, sem .env nem pesos. Extraia `MiniCode-parte2` em
@@ -70,7 +76,7 @@ cd /home/vitoria/Documentos/redesneurais/MiniCode
 python3 -m venv .venv-ml
 .venv-ml/bin/python -m pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
 .venv-ml/bin/python -m pip install -r requirements-ml.txt
-.venv-ml/bin/python scripts/run_part2_experiments.py --run-dir /home/vitoria/Documentos/redesneurais/MiniCode/artifacts/colab-v2 --output /home/vitoria/Documentos/redesneurais/MiniCode/experiments/results/parte2-v2-e2e --device cpu
+OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 .venv-ml/bin/python scripts/run_part2_experiments.py --run-dir /home/vitoria/Documentos/redesneurais/MiniCode/artifacts/colab-v2 --output /home/vitoria/Documentos/redesneurais/MiniCode/experiments/results/parte2-v2-e2e-02 --device cpu
 ```
 
 O carregador direto usa o mesmo template/parser do notebook e elimina a necessidade de túnel
@@ -88,7 +94,7 @@ Uma saída inválida do seletor causa falha auditada, sem fallback oculto.
 
 ```bash
 cd /home/vitoria/Documentos/redesneurais/MiniCode
-.venv/bin/python scripts/summarize_part2_results.py --run-dir /home/vitoria/Documentos/redesneurais/MiniCode/artifacts/colab-v2 --end-to-end /home/vitoria/Documentos/redesneurais/MiniCode/experiments/results/parte2-v2-e2e --output /home/vitoria/Documentos/redesneurais/MiniCode/docs/RESULTADOS_EXECUCAO_V2.md
+.venv/bin/python scripts/summarize_part2_results.py --run-dir /home/vitoria/Documentos/redesneurais/MiniCode/artifacts/colab-v2 --end-to-end /home/vitoria/Documentos/redesneurais/MiniCode/experiments/results/parte2-v2-e2e-02 --output /home/vitoria/Documentos/redesneurais/MiniCode/docs/RESULTADOS_EXECUCAO_V2.md
 ```
 
 7. Revise as oito respostas em `RESULTADOS_PARTE2.md`, documente falhas operacionais e grave a

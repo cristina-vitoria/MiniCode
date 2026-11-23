@@ -1,0 +1,20 @@
+{
+  "base_test": {
+    "examples": 16,
+    "correct": 0,
+    "accuracy": 0.0,
+    "invalid_predictions": 16
+  },
+  "lora_test": {
+    "examples": 16,
+    "correct": 12,
+    "accuracy": 0.75,
+    "invalid_predictions": 1
+  },
+  "lora_no_context_test": {
+    "examples": 16,
+    "correct": 13,
+    "accuracy": 0.8125,
+    "invalid_predictions": 0
+  }
+}

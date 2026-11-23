@@ -1,0 +1,121 @@
+{
+  "split": "test",
+  "examples": 16,
+  "correct": 12,
+  "accuracy": 0.75,
+  "invalid_predictions": 1,
+  "per_example": [
+    {
+      "id": "retry_timeout-1",
+      "gold": "list_files",
+      "predicted": "list_files",
+      "valid_tool": true,
+      "correct": true
+    },
+    {
+      "id": "retry_timeout-2",
+      "gold": "search_code",
+      "predicted": "search_code",
+      "valid_tool": true,
+      "correct": true
+    },
+    {
+      "id": "retry_timeout-3",
+      "gold": "read_file",
+      "predicted": "app/retry.py",
+      "valid_tool": false,
+      "correct": false
+    },
+    {
+      "id": "retry_timeout-4",
+      "gold": "read_file",
+      "predicted": "read_file",
+      "valid_tool": true,
+      "correct": true
+    },
+    {
+      "id": "retry_timeout-5",
+      "gold": "replace_python_function",
+      "predicted": "write_file",
+      "valid_tool": true,
+      "correct": false
+    },
+    {
+      "id": "retry_timeout-6",
+      "gold": "write_file",
+      "predicted": "write_file",
+      "valid_tool": true,
+      "correct": true
+    },
+    {
+      "id": "retry_timeout-7",
+      "gold": "run_tests",
+      "predicted": "write_file",
+      "valid_tool": true,
+      "correct": false
+    },
+    {
+      "id": "retry_timeout-8",
+      "gold": "read_test_output",
+      "predicted": "read_test_output",
+      "valid_tool": true,
+      "correct": true
+    },
+    {
+      "id": "audit_logging-1",
+      "gold": "list_files",
+      "predicted": "list_files",
+      "valid_tool": true,
+      "correct": true
+    },
+    {
+      "id": "audit_logging-2",
+      "gold": "search_code",
+      "predicted": "search_code",
+      "valid_tool": true,
+      "correct": true
+    },
+    {
+      "id": "audit_logging-3",
+      "gold": "read_file",
+      "predicted": "read_file",
+      "valid_tool": true,
+      "correct": true
+    },
+    {
+      "id": "audit_logging-4",
+      "gold": "read_file",
+      "predicted": "read_file",
+      "valid_tool": true,
+      "correct": true
+    },
+    {
+      "id": "audit_logging-5",
+      "gold": "write_file",
+      "predicted": "write_file",
+      "valid_tool": true,
+      "correct": true
+    },
+    {
+      "id": "audit_logging-6",
+      "gold": "write_file",
+      "predicted": "write_file",
+      "valid_tool": true,
+      "correct": true
+    },
+    {
+      "id": "audit_logging-7",
+      "gold": "run_tests",
+      "predicted": "write_file",
+      "valid_tool": true,
+      "correct": false
+    },
+    {
+      "id": "audit_logging-8",
+      "gold": "read_test_output",
+      "predicted": "read_test_output",
+      "valid_tool": true,
+      "correct": true
+    }
+  ]
+}

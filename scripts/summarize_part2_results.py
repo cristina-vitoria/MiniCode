@@ -38,8 +38,8 @@ def main():
         '| Condição | Acertos | Acurácia | Inválidas |','|---|---:|---:|---:|']
     for name,report in reports.items():
         lines.append(f"| {name} | {report['correct']}/{report['examples']} | {report['accuracy']:.2%} | {report['invalid_predictions']} |")
-    lines += ['',f'Diferença LoRA − base: {delta:+.2%} pontos percentuais.',
-        f'Diferença contexto − sem contexto: {ablation:+.2%} pontos percentuais.',
+    lines += ['',f'Diferença LoRA − base: {100*delta:+.2f} pontos percentuais.',
+        f'Diferença contexto − sem contexto: {100*ablation:+.2f} pontos percentuais.',
         '', 'Este é um piloto sintético com duas famílias de teste e templates compartilhados.',
         'As decisões de uma família não são observações independentes. Não há evidência de generalização ampla.']
     if args.end_to_end:

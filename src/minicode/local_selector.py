@@ -11,15 +11,13 @@ class LocalSelectorClient:
         from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
         if device == 'cuda' and not torch.cuda.is_available():
             raise ValueError('CUDA indisponível')
-        if quantized and device != 'cuda':
-            raise ValueError('QLoRA 4-bit requer CUDA neste protocolo')
-        dtype = torch.float32 if device == 'cpu' else torch.float16
+        dtype = torch.float16 if quantized or device == 'cuda' else torch.float32
         options = dict(revision=revision, dtype=dtype, trust_remote_code=False)
         if quantized:
             options['quantization_config'] = BitsAndBytesConfig(load_in_4bit=True,
                 bnb_4bit_quant_type='nf4', bnb_4bit_use_double_quant=True,
                 bnb_4bit_compute_dtype=dtype)
-            options['device_map'] = {'': 0}
+            options['device_map'] = {'': 0 if device == 'cuda' else 'cpu'}
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path or model_path,
             revision=revision if not tokenizer_path else None, trust_remote_code=False)
         self.model_object = AutoModelForCausalLM.from_pretrained(model_path, **options)
@@ -32,7 +30,8 @@ class LocalSelectorClient:
         self.model_object.eval()
         self.model = str(model_path)
         self.metadata = {'model': str(model_path), 'revision': revision, 'device': device,
-                         'quantized': quantized, 'adapter': str(adapter) if adapter else None,
+                         'quantized': quantized, 'dtype': str(dtype),
+                         'adapter': str(adapter) if adapter else None,
                          'adapter_sha256': sha256_file(Path(adapter) / 'adapter_model.safetensors')
                          if adapter else None}
 

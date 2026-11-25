@@ -97,9 +97,7 @@ cd /home/vitoria/Documentos/redesneurais/MiniCode
 .venv/bin/python scripts/summarize_part2_results.py --run-dir /home/vitoria/Documentos/redesneurais/MiniCode/artifacts/colab-v2 --end-to-end /home/vitoria/Documentos/redesneurais/MiniCode/experiments/results/parte2-v2-e2e-02 --output /home/vitoria/Documentos/redesneurais/MiniCode/docs/RESULTADOS_EXECUCAO_V2.md
 ```
 
-7. Revise as oito respostas em `RESULTADOS_PARTE2.md`, documente falhas operacionais e grave a
-   demonstração seguindo `ROTEIRO_VIDEO_PARTE2.md`. Uma única repetição em seis tarefas tem alta
-   incerteza; apresente essa limitação e preserve todas as tentativas, inclusive negativas.
+7. Revise as oito respostas em `RESULTADOS_PARTE2.md'.
 
 ## Verificação de engenharia
 

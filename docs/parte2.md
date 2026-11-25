@@ -72,11 +72,10 @@ pasta `parte2-v2-e2e-02`; a pasta sem sufixo preserva a tentativa interrompida.
 5. Na raiz local, prepare o ambiente e execute as condições com Docker disponível:
 
 ```bash
-cd /home/vitoria/Documentos/redesneurais/MiniCode
 python3 -m venv .venv-ml
 .venv-ml/bin/python -m pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
 .venv-ml/bin/python -m pip install -r requirements-ml.txt
-OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 .venv-ml/bin/python scripts/run_part2_experiments.py --run-dir /home/vitoria/Documentos/redesneurais/MiniCode/artifacts/colab-v2 --output /home/vitoria/Documentos/redesneurais/MiniCode/experiments/results/parte2-v2-e2e-02 --device cpu
+OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 .venv-ml/bin/python scripts/run_part2_experiments.py --run-dir MiniCode/artifacts/colab-v2 --output MiniCode/experiments/results/parte2-v2-e2e-02 --device cpu
 ```
 
 O carregador direto usa o mesmo template/parser do notebook e elimina a necessidade de túnel
@@ -94,7 +93,7 @@ Uma saída inválida do seletor causa falha auditada, sem fallback oculto.
 
 ```bash
 cd /home/vitoria/Documentos/redesneurais/MiniCode
-.venv/bin/python scripts/summarize_part2_results.py --run-dir /home/vitoria/Documentos/redesneurais/MiniCode/artifacts/colab-v2 --end-to-end /home/vitoria/Documentos/redesneurais/MiniCode/experiments/results/parte2-v2-e2e-02 --output /home/vitoria/Documentos/redesneurais/MiniCode/docs/RESULTADOS_EXECUCAO_V2.md
+.venv/bin/python scripts/summarize_part2_results.py --run-dir MiniCode/artifacts/colab-v2 --end-to-end MiniCode/experiments/results/parte2-v2-e2e-02 --output MiniCode/docs/RESULTADOS_EXECUCAO_V2.md
 ```
 
 7. Revise as oito respostas em `RESULTADOS_PARTE2.md'.
@@ -102,7 +101,6 @@ cd /home/vitoria/Documentos/redesneurais/MiniCode
 ## Verificação de engenharia
 
 ```bash
-cd /home/vitoria/Documentos/redesneurais/MiniCode
 .venv/bin/python -m unittest discover -s tests -v
 MINICODE_DOCKER_TESTS=1 .venv/bin/python -m unittest discover -s tests -p test_docker.py -v
 .venv-ml/bin/python scripts/smoke_selector_training.py
